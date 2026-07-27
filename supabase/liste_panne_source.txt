@@ -1,0 +1,97 @@
+1 - Operating system exception detected
+1 - Unhandled C++ exception
+1- DeleveryInterfaceClinicalState: One or more calibration files are missing (need calibration) or not committed. RDS los has more details
+1- kVcollimatorPrepareFragmentState : no working controler 
+2 - a PCP has failed the watchdog
+2- MMPS not online 
+2- A required SSM device is not onlinge
+3- Beamline devices offline : AFC on ICA off MMPS on IPPS on SSM on
+3- Couch failed to initialize : 180seconds time out
+3- Timed out waiting for HW OK signal
+4- Motion procedure or radiograph is required, but kv is disavled, possibly missing hardware
+8 - failed to setup procedure: failed to setup procedure
+8-KVTriggerPrepareFragmentState : doWork
+8- Detector kV fault
+8 - KvDetector run procedure failed
+24 - MonitorSafety Status: Emergency stop button pressed
+25 - BeamLine runRadiation : SSM Fault
+25 - Beamline devices offline : AFC on, ICA off, MMPS on, IPPS on, SSM on
+25- BeamLiveTask::HardwareOkEventHandler, Hardware Ok Fault, generating FAULT_MACHINE
+26- Dose chamber B to A : average value out of range timeout expired
+26 -  Beamline ::: RunRadiation: performance tolerance fault
+26- Beamlinetask::subsystemerror:dose Chamber A: average value out of range, timeout expired
+26- dose chamber B : average value out of range timeout expired
+26- Dose Chamber 1 - average value out-of-range, timeout expired
+31- Failed to set magnetronMagnet to 180000mA
+31- Failed to set magnetronMagnet to 1600 mA
+38 - DCS: CCPS value outside of control range limits of 810.314 to 831.541 for > 5 seconds.
+42 - Tscan position error over tolerance
+43- test2: final leaf positional fault
+43- initTest : no leaf was opened, check MLC hardware and MLC air pressure
+45 : monitor safety status : interlock is open
+47 -  PTP monitor fault
+47 - StationarySafetyWaitForReadyState: has watchdog fault when entering critical state
+47 - Watchdog Fault:KvGenerator_RadiatePrep on RCS has a watchdog timeout
+47 - Watchdog Fault:Raw_Data_Collectorbeamlinestatusdatawatchdog on SCS has a watchdog timeout
+47- RotationalSafetyWaitForReadyState: has watchdog fault when entering critical state 
+47- watchdog fault : kv collimator on RCShas a subsystem watchdog timeout
+47-watchdog fault : beamtrigger on RCS has a subsystem watchdog time out
+49 - MonitorSafetyStatus - PDU OK Signals indicate voltage are outside of acceptable ranges
+49.- Monior SafetyStatus: PDU OK signal indicates voltages are outside of acceptable ranges
+50-Monitor safety status/pdu standly button has been pressed
+52-the requiest/correct imputs were not found-key position likely
+54- Unable to set couch button panel
+54 - monitorThread : Failed to turn off keypad controls
+54 SYSTEM FAUTE
+54-Couch error in setting Y position
+54-Couch error in setting Z position
+58 - LaserWaitForEncounterState: Error moving lasers to 0.0
+58 - LaserTask::homePositionOnThread:ProcedureFault-Failed to move lasers to desired position. Logs have amount.
+64 - Gantry error: STATUS_NO_ERROR, drive error: Software Error
+79 - 2786335,4194305,4194305,4194305 : Jaw subsystem indicates it is in a faulted state, recovery must be attempted
+79- JawPreapare Fragment State : std Bad Alloc
+79 - 2786315-2786298 : JawWaitForReadyState // Driver Exception - Verifiy Calibration failed, Jaw needs calibration
+79 - 2786335-4194305-4194305-4194305 : Jaw subsistem indicates it is in a faulted state, recovery must be attempted
+79 - 2786348-2786348…. JawRadiateStateException… Jaw profile aborted due to an error
+79 - 2786315,-1:Jaw Faults could not be recovered from
+79 - 2786321, 2786323 : Jaw faults could not recovered from
+79 - 2786315,2786320,2786315, 2786315, 2786335, … subsystem indicates it is in fault state, recovery must be attempted
+79 - 2786321,2786323 : Jaw Faults could not be revored from
+81- RawDATARadiation : streaming error, failed to prepare processed detector blocks 
+81 - RawData: streaming error
+83 - Rawdata Task data timeout in Rawdata receive channel
+85 DASRRADIATIONSTATE DAS packet total errors
+87- BeamTriggerRadiationState : Primary Procedure Monitor failed
+89- Failed to cancel previous kv generator task for new encounter
+89-/mnt/jenkins/workspace /RDS/Europa_3.0.0.10_Embedded/RD….output tolerance
+90 - /mnt/jenkins/workspace/RDS/Europa_3.0.0.10_Embedded/RD to confirm setting anode speed
+90- Attempting to start a procedure that requires Unavailable kV Hardware
+93 - Kv Generator Faulted
+93-/mnt/jenkins/workspace/RDS/Europa_3,0,0,10_Embedded/RD Generator Raised an event
+54- Unsolicited move loc: Z1 ctrlr (Base) Error code (140F)
+100-TDCS initiated fault: Received STOP_PROCEDURE This causes faultProcedure to be fired 
+105 - kVTriggerTaskTask::kVTriggerMonitorErrcallback - Detector trigger received unexpectedly
+105 - KVTriggerRadiationState : doWork - Failed to run scheduled Kvct
+108 - KVDetector ActuatorTask::errorCallback-Galil Amplifier Status ( Peak current)
+108 - KVDetector ActuatorWaitForReadyState::doWork - Kv Detector actuator application disabled
+108- KVDetector Actuator Post Fragment State : Do Work - Failed to stop motion
+112-TDCS
+SERVICE CODE 0D281344
+SERVICE CODE 6E8F34F0
+SERVICE CODE SYSTÈME ERROR B2B38097
+SERVICE CODE SYSTÈME ERROR 3C231669
+SERVICE CODE SYSTÈME ERROR 7CF35CBF
+System error Service code 0D281344
+The emergency Stop button is pressed
+The machine is not connected
+The machine has encountered multiple faults and is attempting to reset itself,
+écran figé
+Machine unexpectedly disconnected
+Porte du bunker
+Erreur de communication DICOM 
+MLC leaf is in the wrong position
+machine s'est coupée avant connexion à TDC
+Critical Error (ID 7AC3626D)
+aucun message sur la TDC <-> exctinction non voulue de la radixact PCP éteints
+108-KVDETECTORActuator task:::errorcallback- Galil Axis Specific Error Word (0x2018- Galil Digittal Motion Controller (DMC)-Axis Specific-over velocity condition detected)
+108- KVDetectorActuatorPrepareFragmentState::doWork-Kv Detector Actuator application disabled 
