@@ -11,27 +11,27 @@ const TOP_TABS = [
   { key: "types", label: "Liste des pannes" },
 ];
 
-// Accès restreint : une URL du type https://votre-site.vercel.app/?vue=registre
-// saute l'écran de mot de passe et n'affiche que l'onglet Registre Pannes, sans
-// possibilité de naviguer ailleurs. Pratique pour partager un lien à des
-// personnes qui n'ont besoin que de déclarer des pannes.
-function isRestrictedView() {
+// Deux façons d'obtenir un accès "manipulateur" (restreint au Registre Pannes,
+// sans mot de passe) : le bouton dédié sur l'écran d'accès, ou un lien direct
+// du type https://votre-site.vercel.app/?vue=registre
+function urlAsksRestricted() {
   if (typeof window === "undefined") return false;
   return new URLSearchParams(window.location.search).get("vue") === "registre";
 }
 
 export default function App() {
-  const restricted = useMemo(() => isRestrictedView(), []);
-  const [unlocked, setUnlocked] = useState(
-    () => restricted || sessionStorage.getItem("md_unlocked") === "1"
-  );
-  const [activeTab, setActiveTab] = useState(restricted ? "pannes" : "pannes");
+  const [accessMode, setAccessMode] = useState(() => {
+    if (urlAsksRestricted()) return "manipulateur";
+    return sessionStorage.getItem("md_access") || null;
+  });
+  const restricted = accessMode === "manipulateur";
+  const [activeTab, setActiveTab] = useState("pannes");
   const [center, setCenter] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!unlocked) return;
+    if (!accessMode) return;
     let cancelled = false;
 
     async function loadCenter() {
@@ -57,16 +57,16 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [unlocked]);
+  }, [accessMode]);
 
   const centerLabel = useMemo(() => center?.name ?? "Centre Galilée", [center]);
 
-  if (!unlocked) {
+  if (!accessMode) {
     return (
       <PasswordGate
-        onUnlock={() => {
-          sessionStorage.setItem("md_unlocked", "1");
-          setUnlocked(true);
+        onUnlock={(mode) => {
+          sessionStorage.setItem("md_access", mode);
+          setAccessMode(mode);
         }}
       />
     );
@@ -101,7 +101,7 @@ export default function App() {
                 fontWeight: 600,
               }}
             >
-              Suivi machines{restricted ? " — Registre Pannes" : ""}
+              Suivi machines{restricted ? " — Manipulateur" : ""}
             </div>
             <h1
               style={{
