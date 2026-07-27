@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { supabase, withRetry } from "../lib/supabaseClient";
 import { IconButton } from "./ui";
 
-const emptyPeriod = { date_debut: "", heure_debut: "", date_fin: "", heure_fin: "" };
+const emptyPeriod = { date_debut: "", heure_debut: "", date_fin: "", heure_fin: "", commentaire: "" };
 
-export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated }) {
+export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, onPeriodsChanged }) {
   const [periods, setPeriods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(emptyPeriod);
@@ -45,15 +45,18 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated }
         heure_debut: form.heure_debut,
         date_fin: form.date_fin || null,
         heure_fin: form.heure_fin || null,
+        commentaire: form.commentaire || null,
       })
     );
     setForm(emptyPeriod);
     load();
+    onPeriodsChanged?.();
   }
 
   async function handleDeletePeriod(id) {
     await withRetry(() => supabase.from("downtime_periods").delete().eq("id", id));
     setPeriods((p) => p.filter((x) => x.id !== id));
+    onPeriodsChanged?.();
   }
 
   async function handleSaveMaintenance() {
@@ -160,37 +163,52 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated }
           Périodes d'immobilisation machine
         </h4>
 
-        <form
-          onSubmit={handleAddPeriod}
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr auto", gap: 6, marginBottom: 12 }}
-        >
-          <MiniField label="Début">
-            <input type="date" value={form.date_debut} onChange={(e) => setForm({ ...form, date_debut: e.target.value })} />
-          </MiniField>
-          <MiniField label="Heure">
-            <input type="time" value={form.heure_debut} onChange={(e) => setForm({ ...form, heure_debut: e.target.value })} />
-          </MiniField>
-          <MiniField label="Fin">
-            <input type="date" value={form.date_fin} onChange={(e) => setForm({ ...form, date_fin: e.target.value })} />
-          </MiniField>
-          <MiniField label="Heure">
-            <input type="time" value={form.heure_fin} onChange={(e) => setForm({ ...form, heure_fin: e.target.value })} />
-          </MiniField>
-          <button
-            type="submit"
+        <form onSubmit={handleAddPeriod} style={{ marginBottom: 12 }}>
+          <div
             style={{
-              alignSelf: "end",
-              background: "var(--accent)",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              padding: "6px 12px",
-              fontSize: "0.8rem",
-              height: 32,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr 1fr auto",
+              gap: 6,
+              marginBottom: 6,
             }}
           >
-            +
-          </button>
+            <MiniField label="Début">
+              <input type="date" value={form.date_debut} onChange={(e) => setForm({ ...form, date_debut: e.target.value })} />
+            </MiniField>
+            <MiniField label="Heure">
+              <input type="time" value={form.heure_debut} onChange={(e) => setForm({ ...form, heure_debut: e.target.value })} />
+            </MiniField>
+            <MiniField label="Fin">
+              <input type="date" value={form.date_fin} onChange={(e) => setForm({ ...form, date_fin: e.target.value })} />
+            </MiniField>
+            <MiniField label="Heure">
+              <input type="time" value={form.heure_fin} onChange={(e) => setForm({ ...form, heure_fin: e.target.value })} />
+            </MiniField>
+            <button
+              type="submit"
+              style={{
+                alignSelf: "end",
+                background: "var(--accent)",
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                padding: "6px 12px",
+                fontSize: "0.8rem",
+                height: 32,
+              }}
+            >
+              +
+            </button>
+          </div>
+          <MiniField label="Commentaire sur cette immobilisation (optionnel)">
+            <input
+              type="text"
+              value={form.commentaire}
+              onChange={(e) => setForm({ ...form, commentaire: e.target.value })}
+              placeholder="ex : remplacement carte contrôleur, attente pièce…"
+              style={{ width: "100%" }}
+            />
+          </MiniField>
         </form>
         {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem" }}>{error}</p>}
 
@@ -205,12 +223,17 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated }
             <tbody>
               {periods.map((p) => (
                 <tr key={p.id} style={{ borderTop: "1px solid var(--border)" }}>
-                  <td style={td} className="mono">
-                    {formatDate(p.date_debut)} {p.heure_debut?.slice(0, 5)}
-                  </td>
-                  <td style={td}>→</td>
-                  <td style={td} className="mono">
-                    {p.date_fin ? `${formatDate(p.date_fin)} ${p.heure_fin?.slice(0, 5) || ""}` : "en cours"}
+                  <td style={td}>
+                    <div className="mono">
+                      {formatDate(p.date_debut)} {p.heure_debut?.slice(0, 5)}
+                      {" → "}
+                      {p.date_fin ? `${formatDate(p.date_fin)} ${p.heure_fin?.slice(0, 5) || ""}` : "en cours"}
+                    </div>
+                    {p.commentaire && (
+                      <div style={{ color: "var(--ink-soft)", fontSize: "0.78rem", marginTop: 2 }}>
+                        {p.commentaire}
+                      </div>
+                    )}
                   </td>
                   <td style={td}>
                     <IconButton title="Supprimer" danger onClick={() => handleDeletePeriod(p.id)}>

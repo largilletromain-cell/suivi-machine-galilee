@@ -62,6 +62,36 @@ export function StatusBadge({ value }) {
   );
 }
 
+// Couleurs appliquées directement aux <select> de statut dans Work Order,
+// pour un repérage visuel immédiat (rouge = à traiter, orange = à surveiller,
+// vert = clos), sans dépendre d'un badge séparé.
+const SELECT_COLOR_MAP = {
+  statut: {
+    non_resolu: { bg: "var(--status-bad-bg)", ink: "var(--status-bad-ink)" },
+    en_surveillance: { bg: "var(--status-warn-bg)", ink: "var(--status-warn-ink)" },
+    resolu: { bg: "var(--status-ok-bg)", ink: "var(--status-ok-ink)" },
+  },
+  statut_wo: {
+    ouvert: { bg: "var(--status-bad-bg)", ink: "var(--status-bad-ink)" },
+    ferme: { bg: "var(--status-ok-bg)", ink: "var(--status-ok-ink)" },
+  },
+  rapport_recu: {
+    non: { bg: "var(--status-bad-bg)", ink: "var(--status-bad-ink)" },
+    oui: { bg: "var(--status-ok-bg)", ink: "var(--status-ok-ink)" },
+  },
+};
+
+export function statusSelectStyle(field, value) {
+  const c = SELECT_COLOR_MAP[field]?.[value];
+  if (!c) return {};
+  return {
+    backgroundColor: c.bg,
+    color: c.ink,
+    fontWeight: 600,
+    borderColor: c.ink,
+  };
+}
+
 export function IconButton({ title, onClick, children, danger }) {
   return (
     <button
