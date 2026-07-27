@@ -413,26 +413,21 @@ export default function WorkOrders({ centerId }) {
 
 function SortHeader({ label, field, sort, onSort }) {
   const active = sort.field === field;
-  const arrow = active ? (sort.dir === "asc" ? "▲" : "▼") : "";
+  const arrow = active ? (sort.dir === "asc" ? "▲" : "▼") : "⇅";
   return (
-    <th style={th}>
-      <button
-        onClick={() => onSort(field)}
-        style={{
-          border: "none",
-          background: "transparent",
-          color: active ? "var(--accent-strong)" : "var(--ink-soft)",
-          fontWeight: active ? 700 : 600,
-          fontSize: "0.72rem",
-          padding: 0,
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 4,
-        }}
-        title={`Trier par ${label}`}
-      >
-        {label} <span style={{ fontSize: "0.6rem" }}>{arrow}</span>
-      </button>
+    <th
+      onClick={() => onSort(field)}
+      style={{
+        ...th,
+        cursor: "pointer",
+        userSelect: "none",
+        color: active ? "var(--accent-strong)" : "var(--ink-soft)",
+        fontWeight: active ? 700 : 600,
+        whiteSpace: "nowrap",
+      }}
+      title={`Trier par ${label}`}
+    >
+      {label} <span style={{ fontSize: "0.62rem", opacity: active ? 1 : 0.5 }}>{arrow}</span>
     </th>
   );
 }
@@ -445,7 +440,19 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
         <td style={td} className="mono">
           {formatDate(r.date_decouverte)}
         </td>
-        <td style={{ ...td, minWidth: 200 }}>{r.panne_erreur}</td>
+        <td style={{ ...td, minWidth: 200 }}>
+          <input
+            type="text"
+            defaultValue={r.panne_erreur}
+            onBlur={(e) => {
+              e.target.style.border = "1px solid transparent";
+              if (e.target.value.trim()) onUpdateField(r, "panne_erreur", e.target.value.trim());
+              else e.target.value = r.panne_erreur;
+            }}
+            style={{ width: "100%", border: "1px solid transparent", background: "transparent", padding: "4px 6px" }}
+            onFocus={(e) => (e.target.style.border = "1px solid var(--border)")}
+          />
+        </td>
         <td style={td}>
           <select
             value={r.statut}

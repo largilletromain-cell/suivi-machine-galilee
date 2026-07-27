@@ -13,6 +13,8 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
   );
   const [maintenanceDate, setMaintenanceDate] = useState(workOrder.maintenance_date || "");
   const [error, setError] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(emptyPeriod);
 
   useEffect(() => {
     load();
@@ -54,9 +56,58 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
   }
 
   async function handleDeletePeriod(id) {
+    if (!window.confirm("Supprimer cette période d'immobilisation ?")) return;
     await withRetry(() => supabase.from("downtime_periods").delete().eq("id", id));
     setPeriods((p) => p.filter((x) => x.id !== id));
     onPeriodsChanged?.();
+  }
+
+  function startEdit(p) {
+    setEditingId(p.id);
+    setEditForm({
+      date_debut: p.date_debut || "",
+      heure_debut: p.heure_debut?.slice(0, 5) || "",
+      date_fin: p.date_fin || "",
+      heure_fin: p.heure_fin?.slice(0, 5) || "",
+      commentaire: p.commentaire || "",
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditForm(emptyPeriod);
+  }
+
+  async function saveEdit(id) {
+    const res = await withRetry(() =>
+      supabase
+        .from("downtime_periods")
+        .update({
+          date_debut: editForm.date_debut,
+          heure_debut: editForm.heure_debut,
+          date_fin: editForm.date_fin || null,
+          heure_fin: editForm.heure_fin || null,
+          commentaire: editForm.commentaire || null,
+        })
+        .eq("id", id)
+        .select()
+        .single()
+    );
+    if (res.data) {
+      setPeriods((ps) => ps.map((p) => (p.id === id ? res.data : p)));
+      onPeriodsChanged?.();
+    }
+    cancelEdit();
+  }
+
+  async function clearComment(p) {
+    const res = await withRetry(() =>
+      supabase.from("downtime_periods").update({ commentaire: null }).eq("id", p.id).select().single()
+    );
+    if (res.data) {
+      setPeriods((ps) => ps.map((x) => (x.id === p.id ? res.data : x)));
+      onPeriodsChanged?.();
+    }
   }
 
   async function handleSaveMaintenance() {
@@ -95,7 +146,7 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
           background: "var(--surface)",
           borderRadius: 12,
           padding: 22,
-          width: 560,
+          width: 620,
           maxWidth: "100%",
           maxHeight: "85vh",
           overflowY: "auto",
@@ -160,10 +211,10 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
         </div>
 
         <h4 style={{ margin: "20px 0 8px", fontSize: "0.85rem", color: "var(--ink-soft)" }}>
-          Périodes d'immobilisation machine
+          Ajouter une période d'immobilisation
         </h4>
 
-        <form onSubmit={handleAddPeriod} style={{ marginBottom: 12 }}>
+        <form onSubmit={handleAddPeriod} style={{ marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid var(--border)" }}>
           <div
             style={{
               display: "grid",
@@ -212,6 +263,10 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
         </form>
         {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem" }}>{error}</p>}
 
+        <h4 style={{ margin: "0 0 8px", fontSize: "0.85rem", color: "var(--ink-soft)" }}>
+          Périodes déjà enregistrées
+        </h4>
+
         {loading ? (
           <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Chargement…</p>
         ) : periods.length === 0 ? (
@@ -219,31 +274,146 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
             Aucune période d'immobilisation enregistrée.
           </p>
         ) : (
-          <table>
-            <tbody>
-              {periods.map((p) => (
-                <tr key={p.id} style={{ borderTop: "1px solid var(--border)" }}>
-                  <td style={td}>
-                    <div className="mono">
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {periods.map((p) =>
+              editingId === p.id ? (
+                <div
+                  key={p.id}
+                  style={{
+                    border: "1px solid var(--accent)",
+                    borderRadius: 8,
+                    padding: 10,
+                    background: "var(--accent-soft)",
+                  }}
+                >
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginBottom: 6 }}>
+                    <MiniField label="Début">
+                      <input
+                        type="date"
+                        value={editForm.date_debut}
+                        onChange={(e) => setEditForm({ ...editForm, date_debut: e.target.value })}
+                      />
+                    </MiniField>
+                    <MiniField label="Heure">
+                      <input
+                        type="time"
+                        value={editForm.heure_debut}
+                        onChange={(e) => setEditForm({ ...editForm, heure_debut: e.target.value })}
+                      />
+                    </MiniField>
+                    <MiniField label="Fin">
+                      <input
+                        type="date"
+                        value={editForm.date_fin}
+                        onChange={(e) => setEditForm({ ...editForm, date_fin: e.target.value })}
+                      />
+                    </MiniField>
+                    <MiniField label="Heure">
+                      <input
+                        type="time"
+                        value={editForm.heure_fin}
+                        onChange={(e) => setEditForm({ ...editForm, heure_fin: e.target.value })}
+                      />
+                    </MiniField>
+                  </div>
+                  <MiniField label="Commentaire">
+                    <input
+                      type="text"
+                      value={editForm.commentaire}
+                      onChange={(e) => setEditForm({ ...editForm, commentaire: e.target.value })}
+                      style={{ width: "100%" }}
+                    />
+                  </MiniField>
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <button
+                      onClick={() => saveEdit(p.id)}
+                      style={{
+                        background: "var(--accent)",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 6,
+                        padding: "5px 12px",
+                        fontSize: "0.78rem",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Enregistrer
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      style={{
+                        background: "var(--surface)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 6,
+                        padding: "5px 12px",
+                        fontSize: "0.78rem",
+                      }}
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  key={p.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "start",
+                    gap: 8,
+                    borderTop: "1px solid var(--border)",
+                    paddingTop: 8,
+                  }}
+                >
+                  <div>
+                    <div className="mono" style={{ fontSize: "0.82rem" }}>
                       {formatDate(p.date_debut)} {p.heure_debut?.slice(0, 5)}
                       {" → "}
                       {p.date_fin ? `${formatDate(p.date_fin)} ${p.heure_fin?.slice(0, 5) || ""}` : "en cours"}
                     </div>
                     {p.commentaire && (
-                      <div style={{ color: "var(--ink-soft)", fontSize: "0.78rem", marginTop: 2 }}>
-                        {p.commentaire}
+                      <div style={{ display: "flex", alignItems: "start", gap: 6, marginTop: 2 }}>
+                        <div style={{ color: "var(--ink-soft)", fontSize: "0.78rem" }}>{p.commentaire}</div>
+                        <button
+                          onClick={() => clearComment(p)}
+                          title="Supprimer uniquement le commentaire"
+                          style={{
+                            border: "none",
+                            background: "transparent",
+                            color: "var(--status-bad-ink)",
+                            fontSize: "0.7rem",
+                            padding: 0,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          ✕ commentaire
+                        </button>
                       </div>
                     )}
-                  </td>
-                  <td style={td}>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <button
+                      onClick={() => startEdit(p)}
+                      title="Modifier"
+                      style={{
+                        border: "1px solid var(--border)",
+                        background: "var(--surface)",
+                        borderRadius: 6,
+                        width: 28,
+                        height: 28,
+                        fontSize: "0.85rem",
+                      }}
+                    >
+                      ✎
+                    </button>
                     <IconButton title="Supprimer" danger onClick={() => handleDeletePeriod(p.id)}>
                       ✕
                     </IconButton>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -264,5 +434,3 @@ function formatDate(iso) {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 }
-
-const td = { padding: "5px 8px", fontSize: "0.82rem" };
