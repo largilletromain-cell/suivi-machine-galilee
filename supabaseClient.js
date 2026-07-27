@@ -1,0 +1,85 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+
+:root {
+  --ink: #16202a;
+  --ink-soft: #4a5a66;
+  --paper: #eef1f0;
+  --surface: #ffffff;
+  --rail: #0e161c;
+  --rail-ink: #c7d3d6;
+  --accent: #1f6f78;
+  --accent-strong: #14535b;
+  --accent-soft: #dff0ee;
+  --border: #dbe1e0;
+  --status-ok-bg: #e4f4ea;
+  --status-ok-ink: #206a45;
+  --status-warn-bg: #fbf0dd;
+  --status-warn-ink: #96631a;
+  --status-bad-bg: #fbe6e4;
+  --status-bad-ink: #a3312a;
+
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+code,
+.mono,
+.wo-number,
+.code-chip {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #c3cbc9;
+  border-radius: 6px;
+}
