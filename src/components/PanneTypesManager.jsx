@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase, withRetry } from "../lib/supabaseClient";
 import { IconButton, Panel } from "./ui";
 
@@ -7,6 +7,8 @@ export default function PanneTypesManager() {
   const [loading, setLoading] = useState(true);
   const [newCode, setNewCode] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [newMachineType, setNewMachineType] = useState("Radixact");
+  const [filterType, setFilterType] = useState("Tous");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -17,13 +19,23 @@ export default function PanneTypesManager() {
     setLoading(true);
     try {
       const res = await withRetry(() =>
-        supabase.from("panne_types").select("*").order("active", { ascending: false }).order("code")
+        supabase.from("panne_types").select("*").order("active", { ascending: false }).order("machine_type").order("code")
       );
       setTypes(res.data ?? []);
     } finally {
       setLoading(false);
     }
   }
+
+  const machineTypes = useMemo(() => {
+    const set = new Set(types.map((t) => t.machine_type).filter(Boolean));
+    return Array.from(set).sort();
+  }, [types]);
+
+  const filteredTypes = useMemo(() => {
+    if (filterType === "Tous") return types;
+    return types.filter((t) => (t.machine_type || "Non classé") === filterType);
+  }, [types, filterType]);
 
   async function handleAdd(e) {
     e.preventDefault();
@@ -36,6 +48,7 @@ export default function PanneTypesManager() {
       supabase.from("panne_types").insert({
         code: newCode.trim() || null,
         description: newDesc.trim(),
+        machine_type: newMachineType.trim() || null,
         active: true,
       })
     );
@@ -60,29 +73,47 @@ export default function PanneTypesManager() {
   return (
     <Panel>
       <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem", marginTop: 0 }}>
-        Cette liste alimente le menu déroulant « Erreur rencontrée » du Registre Pannes.
-        Désactivez une entrée pour la masquer sans perdre l'historique déjà saisi, ou
-        ajoutez-en de nouvelles au fil de l'eau.
+        Cette liste alimente le menu déroulant « Erreur rencontrée » du Registre Pannes —
+        chaque erreur est rattachée à un type de machine (ex : Radixact) et n'apparaît que
+        pour les machines de ce type. Désactivez une entrée pour la masquer sans perdre
+        l'historique déjà saisi, ou ajoutez-en de nouvelles au fil de l'eau.
       </p>
 
       <form
         onSubmit={handleAdd}
-        style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}
+        style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "end" }}
       >
-        <input
-          type="text"
-          placeholder="Code (optionnel)"
-          value={newCode}
-          onChange={(e) => setNewCode(e.target.value)}
-          style={{ width: 140 }}
-        />
-        <input
-          type="text"
-          placeholder="Description de l'erreur"
-          value={newDesc}
-          onChange={(e) => setNewDesc(e.target.value)}
-          style={{ flex: 1, minWidth: 260 }}
-        />
+        <Field label="Type de machine">
+          <input
+            type="text"
+            list="machine-type-options"
+            value={newMachineType}
+            onChange={(e) => setNewMachineType(e.target.value)}
+            placeholder="ex : Radixact"
+            style={{ width: 150 }}
+          />
+          <datalist id="machine-type-options">
+            {machineTypes.map((mt) => (
+              <option key={mt} value={mt} />
+            ))}
+          </datalist>
+        </Field>
+        <Field label="Code (optionnel)">
+          <input
+            type="text"
+            value={newCode}
+            onChange={(e) => setNewCode(e.target.value)}
+            style={{ width: 120 }}
+          />
+        </Field>
+        <Field label="Description de l'erreur">
+          <input
+            type="text"
+            value={newDesc}
+            onChange={(e) => setNewDesc(e.target.value)}
+            style={{ width: 320 }}
+          />
+        </Field>
         <button
           type="submit"
           style={{
@@ -92,6 +123,7 @@ export default function PanneTypesManager() {
             borderRadius: 6,
             padding: "8px 16px",
             fontWeight: 600,
+            height: 34,
           }}
         >
           Ajouter
@@ -99,12 +131,25 @@ export default function PanneTypesManager() {
       </form>
       {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem" }}>{error}</p>}
 
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <span style={{ fontSize: "0.78rem", color: "var(--ink-soft)" }}>Filtrer :</span>
+        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ fontSize: "0.82rem" }}>
+          <option value="Tous">Tous les types de machine</option>
+          {machineTypes.map((mt) => (
+            <option key={mt} value={mt}>
+              {mt}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {loading ? (
         <p style={{ color: "var(--ink-soft)" }}>Chargement…</p>
       ) : (
         <table>
           <thead>
             <tr style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--ink-soft)" }}>
+              <th style={th}>Machine</th>
               <th style={th}>Code</th>
               <th style={th}>Description</th>
               <th style={th}>Actif</th>
@@ -112,7 +157,7 @@ export default function PanneTypesManager() {
             </tr>
           </thead>
           <tbody>
-            {types.map((t) => (
+            {filteredTypes.map((t) => (
               <tr
                 key={t.id}
                 style={{
@@ -120,6 +165,11 @@ export default function PanneTypesManager() {
                   opacity: t.active ? 1 : 0.5,
                 }}
               >
+                <td style={td}>
+                  <span className="code-chip" style={chip}>
+                    {t.machine_type || "Non classé"}
+                  </span>
+                </td>
                 <td style={td} className="mono">
                   {t.code || "—"}
                 </td>
@@ -152,5 +202,23 @@ export default function PanneTypesManager() {
   );
 }
 
+function Field({ label, children }) {
+  return (
+    <label style={{ display: "block", fontSize: "0.72rem", color: "var(--ink-soft)" }}>
+      {label}
+      <div style={{ marginTop: 4 }}>{children}</div>
+    </label>
+  );
+}
+
 const th = { padding: "6px 10px" };
 const td = { padding: "8px 10px", fontSize: "0.85rem", verticalAlign: "top" };
+const chip = {
+  background: "var(--accent-soft)",
+  color: "var(--accent-strong)",
+  borderRadius: 4,
+  padding: "2px 8px",
+  fontSize: "0.72rem",
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+};

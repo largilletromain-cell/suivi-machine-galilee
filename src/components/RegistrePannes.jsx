@@ -2,20 +2,32 @@ import { useEffect, useState } from "react";
 import { supabase, withRetry } from "../lib/supabaseClient";
 import { SubTabs, IconButton, Panel } from "./ui";
 
-const emptyForm = {
-  date_panne: "",
-  heure_debut: "",
-  heure_fin: "",
-  panne_type_id: "",
-  commentaire: "",
-};
+function todayISO() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+
+function nowHHMM() {
+  const d = new Date();
+  return d.toTimeString().slice(0, 5);
+}
+
+function defaultForm() {
+  return {
+    date_panne: todayISO(),
+    heure_debut: nowHHMM(),
+    heure_fin: "",
+    panne_type_id: "",
+    commentaire: "",
+  };
+}
 
 export default function RegistrePannes({ centerId }) {
   const [machines, setMachines] = useState([]);
   const [activeMachineId, setActiveMachineId] = useState(null);
   const [panneTypes, setPanneTypes] = useState([]);
   const [rows, setRows] = useState([]);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(defaultForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -23,25 +35,11 @@ export default function RegistrePannes({ centerId }) {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const [machinesRes, typesRes] = await Promise.all([
-        withRetry(() =>
-          supabase
-            .from("machines")
-            .select("*")
-            .eq("center_id", centerId)
-            .order("sort_order")
-        ),
-        withRetry(() =>
-          supabase
-            .from("panne_types")
-            .select("*")
-            .eq("active", true)
-            .order("code")
-        ),
-      ]);
+      const machinesRes = await withRetry(() =>
+        supabase.from("machines").select("*").eq("center_id", centerId).order("sort_order")
+      );
       if (cancelled) return;
       setMachines(machinesRes.data ?? []);
-      setPanneTypes(typesRes.data ?? []);
       if (machinesRes.data?.length) setActiveMachineId(machinesRes.data[0].id);
     }
     load();
@@ -52,8 +50,17 @@ export default function RegistrePannes({ centerId }) {
 
   useEffect(() => {
     if (!activeMachineId) return;
+    const machine = machines.find((m) => m.id === activeMachineId);
     loadRows(activeMachineId);
-  }, [activeMachineId]);
+    loadPanneTypes(machine?.machine_type);
+  }, [activeMachineId, machines]);
+
+  async function loadPanneTypes(machineType) {
+    let query = supabase.from("panne_types").select("*").eq("active", true).order("code");
+    if (machineType) query = query.eq("machine_type", machineType);
+    const res = await withRetry(() => query);
+    setPanneTypes(res.data ?? []);
+  }
 
   async function loadRows(machineId) {
     setLoading(true);
@@ -94,7 +101,7 @@ export default function RegistrePannes({ centerId }) {
           commentaire: form.commentaire || null,
         })
       );
-      setForm(emptyForm);
+      setForm(defaultForm());
       await loadRows(activeMachineId);
     } catch (e) {
       setError("Impossible d'enregistrer cette panne. Réessayez.");
