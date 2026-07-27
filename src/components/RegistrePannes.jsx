@@ -91,8 +91,12 @@ export default function RegistrePannes({ centerId }) {
 
   async function handleAdd(e) {
     e.preventDefault();
-    if (!form.date_panne || !form.heure_debut) {
-      setError("La date et l'heure de début sont obligatoires.");
+    if (!form.date_panne || !form.heure_debut || !form.heure_fin) {
+      setError("La date, l'heure de début et l'heure de fin sont obligatoires.");
+      return;
+    }
+    if (!form.panne_type_id) {
+      setError("L'erreur rencontrée est obligatoire.");
       return;
     }
     setSaving(true);
@@ -103,8 +107,8 @@ export default function RegistrePannes({ centerId }) {
           machine_id: activeMachineId,
           date_panne: form.date_panne,
           heure_debut: form.heure_debut,
-          heure_fin: form.heure_fin || null,
-          panne_type_id: form.panne_type_id || null,
+          heure_fin: form.heure_fin,
+          panne_type_id: form.panne_type_id,
           commentaire: form.commentaire || null,
         })
       );
@@ -276,6 +280,7 @@ export default function RegistrePannes({ centerId }) {
               type="time"
               value={form.heure_fin}
               onChange={(e) => setForm({ ...form, heure_fin: e.target.value })}
+              required
             />
           </Field>
           <Field label="Erreur rencontrée">
@@ -283,6 +288,7 @@ export default function RegistrePannes({ centerId }) {
               value={form.panne_type_id}
               onChange={(e) => setForm({ ...form, panne_type_id: e.target.value })}
               style={{ width: "100%" }}
+              required
             >
               <option value="">— Sélectionner —</option>
               {panneTypes.map((pt) => (
