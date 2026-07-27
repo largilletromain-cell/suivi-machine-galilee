@@ -11,11 +11,21 @@ const TOP_TABS = [
   { key: "types", label: "Liste des pannes" },
 ];
 
+// Accès restreint : une URL du type https://votre-site.vercel.app/?vue=registre
+// saute l'écran de mot de passe et n'affiche que l'onglet Registre Pannes, sans
+// possibilité de naviguer ailleurs. Pratique pour partager un lien à des
+// personnes qui n'ont besoin que de déclarer des pannes.
+function isRestrictedView() {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("vue") === "registre";
+}
+
 export default function App() {
+  const restricted = useMemo(() => isRestrictedView(), []);
   const [unlocked, setUnlocked] = useState(
-    () => sessionStorage.getItem("md_unlocked") === "1"
+    () => restricted || sessionStorage.getItem("md_unlocked") === "1"
   );
-  const [activeTab, setActiveTab] = useState("pannes");
+  const [activeTab, setActiveTab] = useState(restricted ? "pannes" : "pannes");
   const [center, setCenter] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -91,7 +101,7 @@ export default function App() {
                 fontWeight: 600,
               }}
             >
-              Suivi machines
+              Suivi machines{restricted ? " — Registre Pannes" : ""}
             </div>
             <h1
               style={{
@@ -105,29 +115,32 @@ export default function App() {
             </h1>
           </div>
         </div>
-        <nav style={{ display: "flex", gap: 4 }}>
-          {TOP_TABS.map((t) => {
-            const active = activeTab === t.key;
-            return (
-              <button
-                key={t.key}
-                onClick={() => setActiveTab(t.key)}
-                style={{
-                  border: "none",
-                  background: active ? "var(--paper)" : "transparent",
-                  color: active ? "var(--ink)" : "var(--rail-ink)",
-                  padding: "10px 18px",
-                  fontSize: "0.88rem",
-                  fontWeight: 600,
-                  borderRadius: "8px 8px 0 0",
-                  transition: "background 0.15s ease",
-                }}
-              >
-                {t.label}
-              </button>
-            );
-          })}
-        </nav>
+        {!restricted && (
+          <nav style={{ display: "flex", gap: 4 }}>
+            {TOP_TABS.map((t) => {
+              const active = activeTab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setActiveTab(t.key)}
+                  style={{
+                    border: "none",
+                    background: active ? "var(--paper)" : "transparent",
+                    color: active ? "var(--ink)" : "var(--rail-ink)",
+                    padding: "10px 18px",
+                    fontSize: "0.88rem",
+                    fontWeight: 600,
+                    borderRadius: "8px 8px 0 0",
+                    transition: "background 0.15s ease",
+                  }}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </nav>
+        )}
+        {restricted && <div style={{ height: 18 }} />}
       </header>
 
       <main
@@ -155,9 +168,10 @@ export default function App() {
         )}
         {!loading && center && (
           <>
-            {activeTab === "pannes" && <RegistrePannes centerId={center.id} />}
-            {activeTab === "wo" && <WorkOrders centerId={center.id} />}
-            {activeTab === "types" && <PanneTypesManager />}
+            {restricted && <RegistrePannes centerId={center.id} />}
+            {!restricted && activeTab === "pannes" && <RegistrePannes centerId={center.id} />}
+            {!restricted && activeTab === "wo" && <WorkOrders centerId={center.id} />}
+            {!restricted && activeTab === "types" && <PanneTypesManager />}
           </>
         )}
       </main>

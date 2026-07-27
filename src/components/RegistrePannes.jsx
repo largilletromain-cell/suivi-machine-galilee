@@ -149,6 +149,11 @@ export default function RegistrePannes({ centerId }) {
     }
   }
 
+  async function updateField(row, field, value) {
+    await withRetry(() => supabase.from("pannes").update({ [field]: value }).eq("id", row.id));
+    await loadRows(activeMachineId);
+  }
+
   async function handleDelete(id) {
     if (!window.confirm("Supprimer cette ligne du registre de pannes ?")) return;
     await withRetry(() => supabase.from("pannes").delete().eq("id", id));
@@ -337,28 +342,62 @@ export default function RegistrePannes({ centerId }) {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} style={{ borderTop: "1px solid var(--border)" }}>
-                  <td style={td}>{formatDate(r.date_panne)}</td>
-                  <td style={{ ...td }} className="mono">
-                    {r.heure_debut?.slice(0, 5)}
+                  <td style={td}>
+                    <input
+                      type="date"
+                      defaultValue={r.date_panne}
+                      onBlur={(e) => e.target.value && updateField(r, "date_panne", e.target.value)}
+                      style={{ width: 130 }}
+                    />
                   </td>
-                  <td style={{ ...td }} className="mono">
-                    {r.heure_fin?.slice(0, 5) || "—"}
+                  <td style={{ ...td }}>
+                    <input
+                      type="time"
+                      className="mono"
+                      defaultValue={r.heure_debut?.slice(0, 5)}
+                      onBlur={(e) => e.target.value && updateField(r, "heure_debut", e.target.value)}
+                      style={{ width: 100 }}
+                    />
+                  </td>
+                  <td style={{ ...td }}>
+                    <input
+                      type="time"
+                      className="mono"
+                      defaultValue={r.heure_fin?.slice(0, 5) || ""}
+                      onBlur={(e) => updateField(r, "heure_fin", e.target.value || null)}
+                      style={{ width: 100 }}
+                    />
                   </td>
                   <td style={td}>
-                    {r.panne_types ? (
-                      <span>
-                        {r.panne_types.code && (
-                          <span className="code-chip" style={codeChip}>
-                            {r.panne_types.code}
-                          </span>
-                        )}{" "}
-                        {r.panne_types.description}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
+                    <select
+                      value={r.panne_type_id || ""}
+                      onChange={(e) => updateField(r, "panne_type_id", e.target.value || null)}
+                      style={{ width: "100%", fontSize: "0.82rem" }}
+                    >
+                      <option value="">— Aucune —</option>
+                      {!panneTypes.some((pt) => pt.id === r.panne_type_id) && r.panne_types && (
+                        <option value={r.panne_type_id}>
+                          {r.panne_types.code ? `[${r.panne_types.code}] ` : ""}
+                          {r.panne_types.description}
+                        </option>
+                      )}
+                      {panneTypes.map((pt) => (
+                        <option key={pt.id} value={pt.id}>
+                          {pt.code ? `[${pt.code}] ` : ""}
+                          {pt.description}
+                        </option>
+                      ))}
+                    </select>
                   </td>
-                  <td style={td}>{r.commentaire || "—"}</td>
+                  <td style={td}>
+                    <input
+                      type="text"
+                      defaultValue={r.commentaire || ""}
+                      onBlur={(e) => updateField(r, "commentaire", e.target.value || null)}
+                      placeholder="Optionnel"
+                      style={{ width: "100%" }}
+                    />
+                  </td>
                   <td style={td}>
                     <IconButton title="Supprimer" danger onClick={() => handleDelete(r.id)}>
                       ✕
@@ -383,19 +422,5 @@ function Field({ label, children }) {
   );
 }
 
-function formatDate(iso) {
-  if (!iso) return "—";
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
-}
-
 const th = { padding: "6px 10px" };
 const td = { padding: "8px 10px", fontSize: "0.85rem", verticalAlign: "top" };
-const codeChip = {
-  background: "var(--accent-soft)",
-  color: "var(--accent-strong)",
-  borderRadius: 4,
-  padding: "1px 6px",
-  fontSize: "0.72rem",
-  fontWeight: 600,
-};
