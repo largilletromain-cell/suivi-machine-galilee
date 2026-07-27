@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase, withRetry } from "../lib/supabaseClient";
 import { IconButton, Panel } from "./ui";
 
+const PRESET_MACHINE_TYPES = ["Radixact", "Varian"];
+
 export default function PanneTypesManager() {
   const [types, setTypes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,7 +30,7 @@ export default function PanneTypesManager() {
   }
 
   const machineTypes = useMemo(() => {
-    const set = new Set(types.map((t) => t.machine_type).filter(Boolean));
+    const set = new Set([...PRESET_MACHINE_TYPES, ...types.map((t) => t.machine_type).filter(Boolean)]);
     return Array.from(set).sort();
   }, [types]);
 

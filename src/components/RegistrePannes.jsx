@@ -22,6 +22,8 @@ function defaultForm() {
   };
 }
 
+const emptyMachineForm = { code: "", label: "", machine_type: "Radixact" };
+
 export default function RegistrePannes({ centerId }) {
   const [machines, setMachines] = useState([]);
   const [activeMachineId, setActiveMachineId] = useState(null);
@@ -32,20 +34,13 @@ export default function RegistrePannes({ centerId }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const [showAddMachine, setShowAddMachine] = useState(false);
+  const [machineForm, setMachineForm] = useState(emptyMachineForm);
+  const [machineError, setMachineError] = useState("");
+  const [savingMachine, setSavingMachine] = useState(false);
+
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      const machinesRes = await withRetry(() =>
-        supabase.from("machines").select("*").eq("center_id", centerId).order("sort_order")
-      );
-      if (cancelled) return;
-      setMachines(machinesRes.data ?? []);
-      if (machinesRes.data?.length) setActiveMachineId(machinesRes.data[0].id);
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
+    loadMachines();
   }, [centerId]);
 
   useEffect(() => {
@@ -54,6 +49,18 @@ export default function RegistrePannes({ centerId }) {
     loadRows(activeMachineId);
     loadPanneTypes(machine?.machine_type);
   }, [activeMachineId, machines]);
+
+  async function loadMachines(selectId) {
+    const res = await withRetry(() =>
+      supabase.from("machines").select("*").eq("center_id", centerId).order("sort_order")
+    );
+    setMachines(res.data ?? []);
+    if (selectId) {
+      setActiveMachineId(selectId);
+    } else if (res.data?.length && !activeMachineId) {
+      setActiveMachineId(res.data[0].id);
+    }
+  }
 
   async function loadPanneTypes(machineType) {
     let query = supabase.from("panne_types").select("*").eq("active", true).order("code");
@@ -110,6 +117,38 @@ export default function RegistrePannes({ centerId }) {
     }
   }
 
+  async function handleAddMachine(e) {
+    e.preventDefault();
+    if (!machineForm.code.trim()) {
+      setMachineError("Le nom de la machine est obligatoire.");
+      return;
+    }
+    setSavingMachine(true);
+    setMachineError("");
+    try {
+      const res = await withRetry(() =>
+        supabase
+          .from("machines")
+          .insert({
+            center_id: centerId,
+            code: machineForm.code.trim(),
+            label: machineForm.label.trim() || machineForm.code.trim(),
+            machine_type: machineForm.machine_type,
+            sort_order: machines.length,
+          })
+          .select()
+          .single()
+      );
+      setMachineForm(emptyMachineForm);
+      setShowAddMachine(false);
+      await loadMachines(res.data?.id);
+    } catch (e) {
+      setMachineError("Impossible d'ajouter cette machine (nom peut-être déjà utilisé).");
+    } finally {
+      setSavingMachine(false);
+    }
+  }
+
   async function handleDelete(id) {
     if (!window.confirm("Supprimer cette ligne du registre de pannes ?")) return;
     await withRetry(() => supabase.from("pannes").delete().eq("id", id));
@@ -118,11 +157,85 @@ export default function RegistrePannes({ centerId }) {
 
   return (
     <div>
-      <SubTabs
-        items={machines.map((m) => ({ key: m.id, label: m.label || m.code }))}
-        activeKey={activeMachineId}
-        onChange={setActiveMachineId}
-      />
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <SubTabs
+          items={machines.map((m) => ({ key: m.id, label: m.label || m.code }))}
+          activeKey={activeMachineId}
+          onChange={setActiveMachineId}
+        />
+        <button
+          onClick={() => setShowAddMachine((s) => !s)}
+          style={{
+            border: "1px dashed var(--accent)",
+            background: showAddMachine ? "var(--accent-soft)" : "var(--surface)",
+            color: "var(--accent-strong)",
+            borderRadius: 999,
+            padding: "6px 14px",
+            fontSize: "0.8rem",
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+          }}
+        >
+          + Ajouter une machine
+        </button>
+      </div>
+
+      {showAddMachine && (
+        <Panel>
+          <form onSubmit={handleAddMachine} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
+            <Field label="Nom (identifiant court)">
+              <input
+                type="text"
+                className="mono"
+                value={machineForm.code}
+                onChange={(e) => setMachineForm({ ...machineForm, code: e.target.value })}
+                placeholder="ex : TB2010123"
+                style={{ width: 180 }}
+                required
+              />
+            </Field>
+            <Field label="Libellé affiché (optionnel)">
+              <input
+                type="text"
+                value={machineForm.label}
+                onChange={(e) => setMachineForm({ ...machineForm, label: e.target.value })}
+                placeholder="ex : TB2010123"
+                style={{ width: 200 }}
+              />
+            </Field>
+            <Field label="Type de machine">
+              <select
+                value={machineForm.machine_type}
+                onChange={(e) => setMachineForm({ ...machineForm, machine_type: e.target.value })}
+                style={{ width: 150 }}
+              >
+                <option value="Radixact">Radixact</option>
+                <option value="Varian">Varian</option>
+              </select>
+            </Field>
+            <button
+              type="submit"
+              disabled={savingMachine}
+              style={{
+                background: "var(--accent)",
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                padding: "8px 16px",
+                fontWeight: 600,
+                height: 34,
+              }}
+            >
+              {savingMachine ? "…" : "Créer l'onglet"}
+            </button>
+          </form>
+          {machineError && (
+            <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem", marginBottom: 0 }}>{machineError}</p>
+          )}
+        </Panel>
+      )}
+
+      <div style={{ height: 18 }} />
 
       <Panel>
         <form
