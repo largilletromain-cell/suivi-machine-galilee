@@ -1,22 +1,26 @@
 import { useState } from "react";
+import { getAppPassword } from "../lib/supabaseClient";
 
 export default function PasswordGate({ onUnlock }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
+  const [checking, setChecking] = useState(false);
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    const expected = import.meta.env.VITE_APP_PASSWORD;
-    if (!expected) {
-      // Pas de mot de passe configuré : on laisse passer plutôt que de bloquer
-      // définitivement l'accès (utile en développement local).
-      onUnlock("full");
-      return;
-    }
-    if (value === expected) {
-      onUnlock("full");
-    } else {
-      setError("Mot de passe incorrect.");
+    setChecking(true);
+    setError("");
+    try {
+      const expected = await getAppPassword();
+      if (!expected || value === expected) {
+        onUnlock("full");
+      } else {
+        setError("Mot de passe incorrect.");
+      }
+    } catch (err) {
+      setError("Impossible de vérifier le mot de passe pour le moment. Réessayez.");
+    } finally {
+      setChecking(false);
     }
   }
 
@@ -75,6 +79,7 @@ export default function PasswordGate({ onUnlock }) {
           )}
           <button
             type="submit"
+            disabled={checking}
             style={{
               width: "100%",
               background: "var(--accent)",
@@ -86,7 +91,7 @@ export default function PasswordGate({ onUnlock }) {
               fontSize: "0.9rem",
             }}
           >
-            Entrer
+            {checking ? "…" : "Entrer"}
           </button>
         </form>
 

@@ -33,3 +33,27 @@ export async function withRetry(fn, attempts = 3, delayMs = 1200) {
   }
   throw lastError;
 }
+
+// Mot de passe d'accès : stocké dans Supabase (table app_settings) pour
+// pouvoir être changé depuis l'application. Tant qu'aucune valeur n'a été
+// définie, on retombe sur VITE_APP_PASSWORD (celui configuré dans Vercel).
+export async function getAppPassword() {
+  try {
+    const { data } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "app_password")
+      .maybeSingle();
+    if (data?.value) return data.value;
+  } catch (e) {
+    // table pas encore migrée, ou hors ligne : on retombe sur l'env var ci-dessous
+  }
+  return import.meta.env.VITE_APP_PASSWORD || "";
+}
+
+export async function setAppPassword(newPassword) {
+  const { error } = await supabase
+    .from("app_settings")
+    .upsert({ key: "app_password", value: newPassword });
+  if (error) throw error;
+}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase, withRetry, CENTER_CODE } from "./lib/supabaseClient";
 import PasswordGate from "./components/PasswordGate";
+import ChangePasswordModal from "./components/ChangePasswordModal";
 import RegistrePannes from "./components/RegistrePannes";
 import WorkOrders from "./components/WorkOrders";
 import PanneTypesManager from "./components/PanneTypesManager";
@@ -11,9 +12,12 @@ const TOP_TABS = [
   { key: "types", label: "Liste des pannes" },
 ];
 
-// Deux façons d'obtenir un accès "manipulateur" (restreint au Registre Pannes,
-// sans mot de passe) : le bouton dédié sur l'écran d'accès, ou un lien direct
-// du type https://votre-site.vercel.app/?vue=registre
+// L'accès "manipulateur" (sans mot de passe) donne accès au Registre Pannes et
+// à la Liste des pannes, mais pas à l'onglet Work Order.
+const MANIPULATEUR_TABS = TOP_TABS.filter((t) => t.key !== "wo");
+
+// Deux façons d'obtenir un accès "manipulateur" : le bouton dédié sur l'écran
+// d'accès, ou un lien direct du type https://votre-site.vercel.app/?vue=registre
 function urlAsksRestricted() {
   if (typeof window === "undefined") return false;
   return new URLSearchParams(window.location.search).get("vue") === "registre";
@@ -29,6 +33,7 @@ export default function App() {
   const [center, setCenter] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   useEffect(() => {
     if (!accessMode) return;
@@ -60,6 +65,7 @@ export default function App() {
   }, [accessMode]);
 
   const centerLabel = useMemo(() => center?.name ?? "Centre Galilée", [center]);
+  const visibleTabs = restricted ? MANIPULATEUR_TABS : TOP_TABS;
 
   if (!accessMode) {
     return (
@@ -114,33 +120,46 @@ export default function App() {
               {centerLabel}
             </h1>
           </div>
+          {!restricted && (
+            <button
+              onClick={() => setShowChangePassword(true)}
+              style={{
+                border: "1px solid #33424a",
+                background: "transparent",
+                color: "var(--rail-ink)",
+                borderRadius: 999,
+                padding: "6px 14px",
+                fontSize: "0.75rem",
+                whiteSpace: "nowrap",
+              }}
+            >
+              🔒 Changer le mot de passe
+            </button>
+          )}
         </div>
-        {!restricted && (
-          <nav style={{ display: "flex", gap: 4 }}>
-            {TOP_TABS.map((t) => {
-              const active = activeTab === t.key;
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => setActiveTab(t.key)}
-                  style={{
-                    border: "none",
-                    background: active ? "var(--paper)" : "transparent",
-                    color: active ? "var(--ink)" : "var(--rail-ink)",
-                    padding: "10px 18px",
-                    fontSize: "0.88rem",
-                    fontWeight: 600,
-                    borderRadius: "8px 8px 0 0",
-                    transition: "background 0.15s ease",
-                  }}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
-          </nav>
-        )}
-        {restricted && <div style={{ height: 18 }} />}
+        <nav style={{ display: "flex", gap: 4 }}>
+          {visibleTabs.map((t) => {
+            const active = activeTab === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                style={{
+                  border: "none",
+                  background: active ? "var(--paper)" : "transparent",
+                  color: active ? "var(--ink)" : "var(--rail-ink)",
+                  padding: "10px 18px",
+                  fontSize: "0.88rem",
+                  fontWeight: 600,
+                  borderRadius: "8px 8px 0 0",
+                  transition: "background 0.15s ease",
+                }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </nav>
       </header>
 
       <main
@@ -168,13 +187,14 @@ export default function App() {
         )}
         {!loading && center && (
           <>
-            {restricted && <RegistrePannes centerId={center.id} />}
-            {!restricted && activeTab === "pannes" && <RegistrePannes centerId={center.id} />}
+            {activeTab === "pannes" && <RegistrePannes centerId={center.id} />}
             {!restricted && activeTab === "wo" && <WorkOrders centerId={center.id} />}
-            {!restricted && activeTab === "types" && <PanneTypesManager />}
+            {activeTab === "types" && <PanneTypesManager />}
           </>
         )}
       </main>
+
+      {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
     </div>
   );
 }
