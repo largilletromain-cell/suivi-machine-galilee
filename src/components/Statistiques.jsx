@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ResponsiveContainer,
   PieChart,
@@ -48,6 +48,8 @@ export default function Statistiques({ centerId }) {
   const [interventions, setInterventions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonthKey, setSelectedMonthKey] = useState(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const reportRef = useRef(null);
 
   useEffect(() => {
     loadMachines();
@@ -119,6 +121,11 @@ export default function Statistiques({ centerId }) {
     return stats.find((s) => s.year === y && s.month === m) || null;
   }, [stats, selectedMonthKey]);
 
+  const availableHours = useMemo(() => {
+    if (!selectedStat?.theoretical) return null;
+    return Math.max(0, selectedStat.theoretical - selectedStat.totalDowntime);
+  }, [selectedStat]);
+
   // Projection : mois présents et futurs par rapport à aujourd'hui.
   const now = new Date();
   const currentKeyNum = now.getFullYear() * 12 + now.getMonth();
@@ -167,13 +174,107 @@ export default function Statistiques({ centerId }) {
     return m === 12 ? { year: y + 1, month: 1 } : { year: y, month: m + 1 };
   }, [selectedMonthKey]);
 
+  const activeMachine = machines.find((m) => m.id === activeMachineId);
+
+  async function handleGeneratePdf() {
+    if (!reportRef.current || !selectedStat) return;
+    setGeneratingPdf(true);
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+
+      const canvas = await html2canvas(reportRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+      });
+      const imgData = canvas.toDataURL("image/png");
+
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 12;
+
+      // En-tête texte (net, pas capturé en image).
+      doc.setFontSize(14);
+      doc.setFont(undefined, "bold");
+      doc.text("Rapport de disponibilité machine", margin, 18);
+      doc.setFontSize(10);
+      doc.setFont(undefined, "normal");
+      doc.text(`Machine : ${activeMachine?.name ?? ""}`, margin, 26);
+      doc.text(`Mois analysé : ${MONTHS_FR[selectedStat.month - 1]} ${selectedStat.year}`, margin, 32);
+      doc.text(
+        `Généré le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR")}`,
+        margin,
+        38
+      );
+
+      doc.setFontSize(11);
+      doc.setFont(undefined, "bold");
+      doc.text(`Taux de disponibilité : ${selectedStat.availabilityRate?.toFixed(1)}%`, margin, 47);
+      doc.setFont(undefined, "normal");
+      doc.setFontSize(10);
+      doc.text(
+        `Disponible : ${availableHours?.toFixed(1)} h sur ${selectedStat.theoretical.toFixed(1)} h théoriques`,
+        margin,
+        53
+      );
+
+      let y = 60;
+      doc.setFontSize(10);
+      CATEGORY_KEYS.forEach((k) => {
+        if (selectedStat.totals[k] > 0) {
+          doc.text(`• ${EVENT_STYLES[k].label} : ${selectedStat.totals[k].toFixed(1)} h`, margin, y);
+          y += 6;
+        }
+      });
+
+      // Graphiques capturés en image.
+      const imgWidth = pageWidth - margin * 2;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const imgY = y + 6;
+      if (imgY + imgHeight > pageHeight - margin) {
+        doc.addPage();
+        doc.addImage(imgData, "PNG", margin, margin, imgWidth, imgHeight);
+      } else {
+        doc.addImage(imgData, "PNG", margin, imgY, imgWidth, imgHeight);
+      }
+
+      const fileSafeName = (activeMachine?.name ?? "machine").replace(/[^a-z0-9]+/gi, "_");
+      doc.save(`rapport-disponibilite-${fileSafeName}-${selectedStat.year}-${selectedStat.month}.pdf`);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  }
+
   return (
     <div>
-      <SubTabs
-        items={machines.map((m) => ({ key: m.id, label: m.name }))}
-        activeKey={activeMachineId}
-        onChange={setActiveMachineId}
-      />
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <SubTabs
+          items={machines.map((m) => ({ key: m.id, label: m.name }))}
+          activeKey={activeMachineId}
+          onChange={setActiveMachineId}
+        />
+        {selectedStat && (
+          <button
+            onClick={handleGeneratePdf}
+            disabled={generatingPdf}
+            style={{
+              border: "1px solid var(--accent)",
+              background: "var(--accent)",
+              color: "#fff",
+              borderRadius: 999,
+              padding: "8px 16px",
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {generatingPdf ? "Génération…" : "📄 Générer le rapport PDF"}
+          </button>
+        )}
+      </div>
 
       {machines.length === 0 && (
         <p style={{ color: "var(--ink-soft)", fontSize: "0.88rem" }}>
@@ -192,7 +293,7 @@ export default function Statistiques({ centerId }) {
         </Panel>
       ) : (
         <>
-          <div style={{ marginBottom: 14 }}>
+          <div style={{ margin: "14px 0" }}>
             <label style={{ fontSize: "0.78rem", color: "var(--ink-soft)", marginRight: 8 }}>
               Mois analysé
             </label>
@@ -209,105 +310,110 @@ export default function Statistiques({ centerId }) {
             </select>
           </div>
 
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 18 }}>
-            <Panel>
-              <h3 style={{ margin: "0 0 10px", fontSize: "0.9rem" }}>
-                Taux de disponibilité — {selectedStat && MONTHS_FR[selectedStat.month - 1]} {selectedStat?.year}
-              </h3>
-              {selectedStat?.theoretical ? (
-                <div style={{ position: "relative", width: 300, height: 260 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={donutData.length ? donutData : [{ key: "vide", name: "Aucune immobilisation", value: 1, color: "#e2e6e5" }]}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius="62%"
-                        outerRadius="88%"
-                        paddingAngle={donutData.length > 1 ? 2 : 0}
-                      >
-                        {(donutData.length ? donutData : [{ color: "#e2e6e5" }]).map((d, i) => (
-                          <Cell key={i} fill={d.color} stroke="none" />
-                        ))}
-                      </Pie>
-                      {donutData.length > 0 && <Tooltip formatter={(v) => `${v} h`} />}
-                      <Legend verticalAlign="bottom" height={24} wrapperStyle={{ fontSize: "0.72rem" }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "42%",
-                      left: "50%",
-                      transform: "translate(-50%, -50%)",
-                      textAlign: "center",
-                      pointerEvents: "none",
-                    }}
-                  >
-                    <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "var(--ink)" }}>
-                      {selectedStat.availabilityRate?.toFixed(1)}%
-                    </div>
-                    <div style={{ fontSize: "0.68rem", color: "var(--ink-soft)" }}>disponibilité</div>
-                  </div>
-                </div>
-              ) : (
-                <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>
-                  Pas de disponibilité théorique saisie pour ce mois.
-                </p>
-              )}
-            </Panel>
-
-            <Panel>
-              <h3 style={{ margin: "0 0 10px", fontSize: "0.9rem" }}>
-                Projection du taux de disponibilité (mois en cours et suivants)
-              </h3>
-              {projectionStats.length === 0 ? (
-                <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>
-                  Aucun mois présent ou futur avec disponibilité théorique renseignée.
-                </p>
-              ) : (
-                <ResponsiveContainer width={Math.max(360, projectionStats.length * 70)} height={280}>
-                  <BarChart
-                    data={projectionStats.map((s) => ({
-                      label: monthLabel(s.year, s.month),
-                      disponible: Math.max(0, (s.theoretical || 0) - s.totalDowntime),
-                      ...s.totals,
-                    }))}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} unit="h" />
-                    <Tooltip formatter={(v) => `${Number(v).toFixed(1)} h`} />
-                    <Legend wrapperStyle={{ fontSize: "0.72rem" }} />
-                    <Bar dataKey="disponible" stackId="a" fill={AVAILABLE_COLOR} name="Disponible" />
-                    {CATEGORY_KEYS.map((k) => (
-                      <Bar key={k} dataKey={k} stackId="a" fill={EVENT_STYLES[k].color} name={EVENT_STYLES[k].label} />
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </Panel>
-          </div>
-
-          {selectedStat && (
-            <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+          <div ref={reportRef} style={{ background: "var(--paper)" }}>
+            <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 18 }}>
               <Panel>
                 <h3 style={{ margin: "0 0 10px", fontSize: "0.9rem" }}>
-                  Registre d'intervention — {MONTHS_FR[selectedStat.month - 1]} {selectedStat.year}
+                  Taux de disponibilité — {selectedStat && MONTHS_FR[selectedStat.month - 1]} {selectedStat?.year}
                 </h3>
-                <MonthTable rows={rowsForMonth(selectedStat.year, selectedStat.month)} />
+                {selectedStat?.theoretical ? (
+                  <div style={{ position: "relative", width: 300, height: 280 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={donutData.length ? donutData : [{ key: "vide", name: "Aucune immobilisation", value: 1, color: "#e2e6e5" }]}
+                          dataKey="value"
+                          nameKey="name"
+                          innerRadius="60%"
+                          outerRadius="86%"
+                          paddingAngle={donutData.length > 1 ? 2 : 0}
+                        >
+                          {(donutData.length ? donutData : [{ color: "#e2e6e5" }]).map((d, i) => (
+                            <Cell key={i} fill={d.color} stroke="none" />
+                          ))}
+                        </Pie>
+                        {donutData.length > 0 && <Tooltip formatter={(v) => `${v} h`} />}
+                        <Legend verticalAlign="bottom" height={24} wrapperStyle={{ fontSize: "0.72rem" }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "40%",
+                        left: "50%",
+                        transform: "translate(-50%, -50%)",
+                        textAlign: "center",
+                        pointerEvents: "none",
+                      }}
+                    >
+                      <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "var(--ink)" }}>
+                        {selectedStat.availabilityRate?.toFixed(1)}%
+                      </div>
+                      <div style={{ fontSize: "0.68rem", color: "var(--ink-soft)" }}>disponibilité</div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--ink-soft)", marginTop: 3 }} className="mono">
+                        {availableHours?.toFixed(1)} h / {selectedStat.theoretical.toFixed(1)} h
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>
+                    Pas de disponibilité théorique saisie pour ce mois.
+                  </p>
+                )}
               </Panel>
 
-              {nextMonth && (
+              <Panel>
+                <h3 style={{ margin: "0 0 10px", fontSize: "0.9rem" }}>
+                  Projection du taux de disponibilité (mois en cours et suivants)
+                </h3>
+                {projectionStats.length === 0 ? (
+                  <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>
+                    Aucun mois présent ou futur avec disponibilité théorique renseignée.
+                  </p>
+                ) : (
+                  <ResponsiveContainer width={Math.max(360, projectionStats.length * 70)} height={280}>
+                    <BarChart
+                      data={projectionStats.map((s) => ({
+                        label: monthLabel(s.year, s.month),
+                        disponible: Math.max(0, (s.theoretical || 0) - s.totalDowntime),
+                        ...s.totals,
+                      }))}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} unit="h" />
+                      <Tooltip formatter={(v) => `${Number(v).toFixed(1)} h`} />
+                      <Legend wrapperStyle={{ fontSize: "0.72rem" }} />
+                      <Bar dataKey="disponible" stackId="a" fill={AVAILABLE_COLOR} name="Disponible" />
+                      {CATEGORY_KEYS.map((k) => (
+                        <Bar key={k} dataKey={k} stackId="a" fill={EVENT_STYLES[k].color} name={EVENT_STYLES[k].label} />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </Panel>
+            </div>
+
+            {selectedStat && (
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
                 <Panel>
                   <h3 style={{ margin: "0 0 10px", fontSize: "0.9rem" }}>
-                    Interventions prévues — {MONTHS_FR[nextMonth.month - 1]} {nextMonth.year}
+                    Registre d'intervention — {MONTHS_FR[selectedStat.month - 1]} {selectedStat.year}
                   </h3>
-                  <MonthTable rows={rowsForMonth(nextMonth.year, nextMonth.month)} />
+                  <MonthTable rows={rowsForMonth(selectedStat.year, selectedStat.month)} />
                 </Panel>
-              )}
-            </div>
-          )}
+
+                {nextMonth && (
+                  <Panel>
+                    <h3 style={{ margin: "0 0 10px", fontSize: "0.9rem" }}>
+                      Interventions prévues — {MONTHS_FR[nextMonth.month - 1]} {nextMonth.year}
+                    </h3>
+                    <MonthTable rows={rowsForMonth(nextMonth.year, nextMonth.month)} />
+                  </Panel>
+                )}
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>
