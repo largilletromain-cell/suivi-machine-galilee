@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase, withRetry } from "../lib/supabaseClient";
 import { IconButton, Panel } from "./ui";
+import EditSystemModal from "./EditSystemModal";
 
 const emptyForm = {
   name: "",
@@ -15,6 +16,7 @@ export default function Parametrage({ centerId }) {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [editingSystem, setEditingSystem] = useState(null);
 
   useEffect(() => {
     load();
@@ -92,11 +94,6 @@ export default function Parametrage({ centerId }) {
     }
   }
 
-  async function updateField(system, field, value) {
-    setSystems((s) => s.map((x) => (x.id === system.id ? { ...x, [field]: value } : x)));
-    await withRetry(() => supabase.from("systems").update({ [field]: value }).eq("id", system.id));
-  }
-
   async function handleDelete(system) {
     const confirmMsg =
       `Supprimer « ${system.name} » ?\n\n` +
@@ -121,7 +118,8 @@ export default function Parametrage({ centerId }) {
         Créez ici chaque machine ou logiciel à suivre. Un sous-onglet <strong>Work Order</strong> est
         créé automatiquement pour tout système. Si le type est <strong>Radixact</strong> ou{" "}
         <strong>Varian</strong>, un sous-onglet <strong>Registre Pannes</strong> est créé en plus.
-        Le nom et le type ne sont plus modifiables une fois créés (supprimez puis recréez si besoin).
+        Le tableau ci-dessous est en lecture seule — cliquez sur <strong>✎ Modifier</strong> pour
+        changer les informations d'un système.
       </p>
 
       <form
@@ -205,6 +203,7 @@ export default function Parametrage({ centerId }) {
               <th style={th}>Mise en service</th>
               <th style={th}>Registre Pannes</th>
               <th style={th}></th>
+              <th style={th}></th>
             </tr>
           </thead>
           <tbody>
@@ -216,24 +215,27 @@ export default function Parametrage({ centerId }) {
                     {s.system_type}
                   </span>
                 </td>
-                <td style={td}>
-                  <input
-                    type="text"
-                    className="mono"
-                    defaultValue={s.serial_number || ""}
-                    onBlur={(e) => updateField(s, "serial_number", e.target.value || null)}
-                    style={{ width: 150 }}
-                  />
+                <td style={td} className="mono">
+                  {s.serial_number || "—"}
                 </td>
-                <td style={td}>
-                  <input
-                    type="date"
-                    defaultValue={s.commissioning_date || ""}
-                    onBlur={(e) => updateField(s, "commissioning_date", e.target.value || null)}
-                    style={{ width: 140 }}
-                  />
-                </td>
+                <td style={td}>{formatDate(s.commissioning_date)}</td>
                 <td style={td}>{s.machine_id ? "Oui" : "—"}</td>
+                <td style={td}>
+                  <button
+                    onClick={() => setEditingSystem(s)}
+                    style={{
+                      border: "1px solid var(--border)",
+                      background: "var(--surface)",
+                      borderRadius: 6,
+                      padding: "4px 10px",
+                      fontSize: "0.78rem",
+                      fontWeight: 600,
+                      color: "var(--accent-strong)",
+                    }}
+                  >
+                    ✎ Modifier
+                  </button>
+                </td>
                 <td style={td}>
                   <IconButton title="Supprimer" danger onClick={() => handleDelete(s)}>
                     ✕
@@ -243,6 +245,16 @@ export default function Parametrage({ centerId }) {
             ))}
           </tbody>
         </table>
+      )}
+
+      {editingSystem && (
+        <EditSystemModal
+          system={editingSystem}
+          onClose={() => setEditingSystem(null)}
+          onSaved={(updated) => {
+            setSystems((s) => s.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)));
+          }}
+        />
       )}
     </Panel>
   );
@@ -273,6 +285,12 @@ function chip(type) {
     fontWeight: 600,
     whiteSpace: "nowrap",
   };
+}
+
+function formatDate(iso) {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
 }
 
 const th = { padding: "6px 10px" };
