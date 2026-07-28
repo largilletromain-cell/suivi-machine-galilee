@@ -13,8 +13,6 @@ const emptyForm = {
   rapport_recu: false,
 };
 
-const emptyEquipmentForm = { code: "", label: "" };
-
 const STATUT_RANK = { non_resolu: 0, en_surveillance: 1, resolu: 2 };
 const STATUT_WO_RANK = { ouvert: 0, ferme: 1 };
 
@@ -58,11 +56,6 @@ export default function WorkOrders({ centerId }) {
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [sort, setSort] = useState({ field: "date_decouverte", dir: "desc" });
 
-  const [showAddEquipment, setShowAddEquipment] = useState(false);
-  const [equipmentForm, setEquipmentForm] = useState(emptyEquipmentForm);
-  const [equipmentError, setEquipmentError] = useState("");
-  const [savingEquipment, setSavingEquipment] = useState(false);
-
   useEffect(() => {
     loadEquipments();
   }, [centerId]);
@@ -72,14 +65,12 @@ export default function WorkOrders({ centerId }) {
     loadRows(activeEquipmentId);
   }, [activeEquipmentId]);
 
-  async function loadEquipments(selectId) {
+  async function loadEquipments() {
     const res = await withRetry(() =>
       supabase.from("wo_equipments").select("*").eq("center_id", centerId).order("sort_order")
     );
     setEquipments(res.data ?? []);
-    if (selectId) {
-      setActiveEquipmentId(selectId);
-    } else if (res.data?.length && !activeEquipmentId) {
+    if (res.data?.length && !activeEquipmentId) {
       setActiveEquipmentId(res.data[0].id);
     }
   }
@@ -133,37 +124,6 @@ export default function WorkOrders({ centerId }) {
     }
   }
 
-  async function handleAddEquipment(e) {
-    e.preventDefault();
-    if (!equipmentForm.code.trim()) {
-      setEquipmentError("Le nom de la machine / de l'équipement est obligatoire.");
-      return;
-    }
-    setSavingEquipment(true);
-    setEquipmentError("");
-    try {
-      const res = await withRetry(() =>
-        supabase
-          .from("wo_equipments")
-          .insert({
-            center_id: centerId,
-            code: equipmentForm.code.trim(),
-            label: equipmentForm.label.trim() || equipmentForm.code.trim(),
-            sort_order: equipments.length,
-          })
-          .select()
-          .single()
-      );
-      setEquipmentForm(emptyEquipmentForm);
-      setShowAddEquipment(false);
-      await loadEquipments(res.data?.id);
-    } catch (e) {
-      setEquipmentError("Impossible d'ajouter cet équipement (nom peut-être déjà utilisé).");
-    } finally {
-      setSavingEquipment(false);
-    }
-  }
-
   async function updateField(row, field, value) {
     setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, [field]: value } : r)));
     await withRetry(() => supabase.from("work_orders").update({ [field]: value }).eq("id", row.id));
@@ -201,76 +161,17 @@ export default function WorkOrders({ centerId }) {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-        <SubTabs
-          items={equipments.map((e) => ({ key: e.id, label: e.label || e.code }))}
-          activeKey={activeEquipmentId}
-          onChange={setActiveEquipmentId}
-        />
-        <button
-          onClick={() => setShowAddEquipment((s) => !s)}
-          style={{
-            border: "1px dashed var(--accent)",
-            background: showAddEquipment ? "var(--accent-soft)" : "var(--surface)",
-            color: "var(--accent-strong)",
-            borderRadius: 999,
-            padding: "6px 14px",
-            fontSize: "0.8rem",
-            fontWeight: 600,
-            whiteSpace: "nowrap",
-            marginTop: 0,
-          }}
-        >
-          + Ajouter une machine / un équipement
-        </button>
-      </div>
+      <SubTabs
+        items={equipments.map((e) => ({ key: e.id, label: e.label || e.code }))}
+        activeKey={activeEquipmentId}
+        onChange={setActiveEquipmentId}
+      />
 
-      {showAddEquipment && (
-        <Panel>
-          <form onSubmit={handleAddEquipment} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
-            <Field label="Nom (identifiant court)">
-              <input
-                type="text"
-                className="mono"
-                value={equipmentForm.code}
-                onChange={(e) => setEquipmentForm({ ...equipmentForm, code: e.target.value })}
-                placeholder="ex : RX4010600"
-                style={{ width: 200 }}
-                required
-              />
-            </Field>
-            <Field label="Libellé affiché (optionnel)">
-              <input
-                type="text"
-                value={equipmentForm.label}
-                onChange={(e) => setEquipmentForm({ ...equipmentForm, label: e.target.value })}
-                placeholder="ex : RX4010600"
-                style={{ width: 220 }}
-              />
-            </Field>
-            <button
-              type="submit"
-              disabled={savingEquipment}
-              style={{
-                background: "var(--accent)",
-                color: "#fff",
-                border: "none",
-                borderRadius: 6,
-                padding: "8px 16px",
-                fontWeight: 600,
-                height: 34,
-              }}
-            >
-              {savingEquipment ? "…" : "Créer l'onglet"}
-            </button>
-          </form>
-          {equipmentError && (
-            <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem", marginBottom: 0 }}>{equipmentError}</p>
-          )}
-        </Panel>
+      {equipments.length === 0 && (
+        <p style={{ color: "var(--ink-soft)", fontSize: "0.88rem" }}>
+          Aucun système enregistré pour l'instant — créez-en un dans l'onglet <strong>Paramétrage</strong>.
+        </p>
       )}
-
-      <div style={{ height: 18 }} />
 
       <Panel>
         <form
