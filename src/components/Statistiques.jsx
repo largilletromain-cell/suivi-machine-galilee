@@ -16,6 +16,14 @@ import { supabase, withRetry } from "../lib/supabaseClient";
 import { SubTabs, Panel } from "./ui";
 import { computeMonthlyStats, CATEGORY_KEYS } from "../lib/availability";
 
+// Charte graphique Groupe PSV.
+const BRAND = {
+  navy: "#273272",
+  magenta: "#D4005D",
+  blue: "#325DA8",
+  white: "#FFFFFF",
+};
+
 const MONTHS_FR = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
@@ -38,6 +46,11 @@ function formatDate(iso) {
 
 function monthLabel(year, month) {
   return `${MONTHS_FR[month - 1].slice(0, 3)} ${String(year).slice(2)}`;
+}
+
+function hexToRgb(hex) {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
 export default function Statistiques({ centerId }) {
@@ -199,9 +212,10 @@ export default function Statistiques({ centerId }) {
     if (!reportRef.current || !selectedStat) return;
     setGeneratingPdf(true);
     try {
-      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+      const [{ default: html2canvas }, { jsPDF }, { LOGO_PSV_BASE64 }] = await Promise.all([
         import("html2canvas"),
         import("jspdf"),
+        import("../assets/logoPsv"),
       ]);
 
       const canvas = await html2canvas(reportRef.current, {
@@ -214,37 +228,46 @@ export default function Statistiques({ centerId }) {
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 12;
+      const [navyR, navyG, navyB] = hexToRgb(BRAND.navy);
+      const [magentaR, magentaG, magentaB] = hexToRgb(BRAND.magenta);
+      const [blueR, blueG, blueB] = hexToRgb(BRAND.blue);
 
-      // Bannière d'en-tête stylisée (couleurs de la charte de l'application,
-      // dans l'esprit d'un rapport de groupe médical).
-      doc.setFillColor(20, 83, 91); // teal foncé
-      doc.rect(0, 0, pageWidth, 24, "F");
-      doc.setFillColor(240, 180, 41); // liseré ambre
-      doc.rect(0, 24, pageWidth, 1.2, "F");
+      // En-tête blanc (le logo a un fond blanc intégré) avec liserés de
+      // couleur de la charte Groupe PSV et le logo officiel.
+      const logoSize = 20;
+      doc.addImage(LOGO_PSV_BASE64, "PNG", margin, 4, logoSize, logoSize);
 
-      doc.setTextColor(255, 255, 255);
+      const textX = margin + logoSize + 6;
+      doc.setTextColor(navyR, navyG, navyB);
       doc.setFontSize(8.5);
       doc.setFont(undefined, "bold");
-      doc.text("GROUPE PSV — RADIOTHÉRAPIE & ONCOLOGIE", margin, 8);
+      doc.text("GROUPE PSV — RADIOTHÉRAPIE & ONCOLOGIE", textX, 9);
 
       doc.setFontSize(15);
-      doc.text(`Rapport de disponibilité — ${activeMachine?.name ?? ""}`, margin, 17);
+      doc.text(`Rapport de disponibilité — ${activeMachine?.name ?? ""}`, textX, 17);
 
+      doc.setTextColor(blueR, blueG, blueB);
       doc.setFont(undefined, "normal");
       doc.setFontSize(9.5);
-      doc.text(`${MONTHS_FR[selectedStat.month - 1]} ${selectedStat.year}`, pageWidth - margin, 17, { align: "right" });
+      doc.text(`${MONTHS_FR[selectedStat.month - 1]} ${selectedStat.year}`, pageWidth - margin, 12, { align: "right" });
 
-      doc.setTextColor(120, 130, 128);
+      doc.setTextColor(140, 140, 140);
       doc.setFontSize(7.5);
       doc.text(
         `Généré le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR")}`,
         pageWidth - margin,
-        22,
+        18,
         { align: "right" }
       );
       doc.setTextColor(0, 0, 0);
 
-      const y = 32;
+      // Double liseré de couleur sous l'en-tête.
+      doc.setFillColor(navyR, navyG, navyB);
+      doc.rect(0, 26, pageWidth, 1, "F");
+      doc.setFillColor(magentaR, magentaG, magentaB);
+      doc.rect(0, 27, pageWidth, 1, "F");
+
+      const y = 33;
 
       // Graphiques capturés en image.
       const imgWidth = pageWidth - margin * 2;
