@@ -28,7 +28,7 @@ const EVENT_STYLES = {
   parametrage_machine: { color: "#8b3fd1", label: "Paramétrage machine" },
   autre: { color: "#6b7280", label: "Autre" },
 };
-const AVAILABLE_COLOR = "#0f9d7c";
+const AVAILABLE_COLOR = "#f0b429";
 
 function formatDate(iso) {
   if (!iso) return "—";
@@ -431,6 +431,13 @@ function MonthTable({ rows }) {
   }
   return (
     <table>
+      <thead>
+        <tr style={{ textAlign: "left", fontSize: "0.72rem", color: "var(--ink-soft)" }}>
+          <th style={{ padding: "6px 8px" }}>Date</th>
+          <th style={{ padding: "6px 8px" }}>Intitulé</th>
+          <th style={{ padding: "6px 8px" }}>Tâches réalisées</th>
+        </tr>
+      </thead>
       <tbody>
         {rows.map((r) => {
           const style = EVENT_STYLES[r.eventType] ?? EVENT_STYLES.autre;
