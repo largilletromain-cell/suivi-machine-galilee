@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { supabase, withRetry, CENTER_CODE } from "./lib/supabaseClient";
+import { useEffect, useState } from "react";
+import { supabase, withRetry } from "./lib/supabaseClient";
 import PasswordGate from "./components/PasswordGate";
 import ChangePasswordModal from "./components/ChangePasswordModal";
 import RegistrePannes from "./components/RegistrePannes";
@@ -37,7 +37,8 @@ export default function App() {
   });
   const restricted = accessMode === "manipulateur";
   const [activeTab, setActiveTab] = useState("pannes");
-  const [center, setCenter] = useState(null);
+  const [centers, setCenters] = useState([]);
+  const [centerId, setCenterId] = useState(() => sessionStorage.getItem("md_center_id") || null);
   const [loadError, setLoadError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -46,14 +47,15 @@ export default function App() {
     if (!accessMode) return;
     let cancelled = false;
 
-    async function loadCenter() {
+    async function loadCenters() {
       setLoading(true);
       setLoadError(null);
       try {
-        const res = await withRetry(() =>
-          supabase.from("centers").select("*").eq("code", CENTER_CODE).single()
-        );
-        if (!cancelled) setCenter(res.data);
+        const res = await withRetry(() => supabase.from("centers").select("*").order("name"));
+        if (cancelled) return;
+        const list = res.data ?? [];
+        setCenters(list);
+        setCenterId((prev) => (prev && list.some((c) => c.id === prev) ? prev : list[0]?.id ?? null));
       } catch (err) {
         if (!cancelled) {
           setLoadError(
@@ -65,13 +67,16 @@ export default function App() {
         if (!cancelled) setLoading(false);
       }
     }
-    loadCenter();
+    loadCenters();
     return () => {
       cancelled = true;
     };
   }, [accessMode]);
 
-  const centerLabel = useMemo(() => center?.name ?? "Centre Galilée", [center]);
+  useEffect(() => {
+    if (centerId) sessionStorage.setItem("md_center_id", centerId);
+  }, [centerId]);
+
   const visibleTabs = restricted ? MANIPULATEUR_TABS : TOP_TABS;
 
   if (!accessMode) {
@@ -116,16 +121,38 @@ export default function App() {
             >
               Suivi machines{restricted ? " — Manipulateur" : ""}
             </div>
-            <h1
-              style={{
-                margin: "2px 0 0",
-                fontSize: "1.3rem",
-                fontWeight: 700,
-                color: "#f2f5f4",
-              }}
-            >
-              {centerLabel}
-            </h1>
+            {centers.length > 1 ? (
+              <select
+                value={centerId || ""}
+                onChange={(e) => setCenterId(e.target.value)}
+                style={{
+                  marginTop: 2,
+                  background: "transparent",
+                  color: "#f2f5f4",
+                  border: "none",
+                  fontSize: "1.3rem",
+                  fontWeight: 700,
+                  padding: 0,
+                }}
+              >
+                {centers.map((c) => (
+                  <option key={c.id} value={c.id} style={{ color: "#111" }}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <h1
+                style={{
+                  margin: "2px 0 0",
+                  fontSize: "1.3rem",
+                  fontWeight: 700,
+                  color: "#f2f5f4",
+                }}
+              >
+                {centers[0]?.name ?? "Centre"}
+              </h1>
+            )}
           </div>
           {!restricted && (
             <button
@@ -192,15 +219,17 @@ export default function App() {
             {loadError}
           </div>
         )}
-        {!loading && center && (
+        {!loading && centerId && (
           <>
-            {activeTab === "pannes" && <RegistrePannes centerId={center.id} />}
-            {!restricted && activeTab === "wo" && <WorkOrders centerId={center.id} />}
+            {activeTab === "pannes" && <RegistrePannes centerId={centerId} />}
+            {!restricted && activeTab === "wo" && <WorkOrders centerId={centerId} />}
             {!restricted && activeTab === "interventions" && (
-              <RegistreInterventions centerId={center.id} />
+              <RegistreInterventions centerId={centerId} />
             )}
             {activeTab === "types" && <PanneTypesManager />}
-            {!restricted && activeTab === "parametrage" && <Parametrage centerId={center.id} />}
+            {!restricted && activeTab === "parametrage" && (
+              <Parametrage centerId={centerId} centers={centers} onCentersChanged={setCenters} />
+            )}
           </>
         )}
       </main>
