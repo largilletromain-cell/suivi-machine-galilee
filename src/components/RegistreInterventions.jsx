@@ -30,6 +30,7 @@ const EVENT_STYLES = {
   controle_qualite: { color: "#1565e0", bg: "#e8f0fe", label: "Contrôle de qualité" },
   maintenance_preventive: { color: "#1a9c4b", bg: "#e7f7ed", label: "Maintenance préventive" },
   parametrage_machine: { color: "#8b3fd1", bg: "#f3e8fc", label: "Paramétrage machine" },
+  autre: { color: "#6b7280", bg: "#eef0f2", label: "Autre" },
 };
 
 const emptyForm = {
@@ -178,7 +179,7 @@ export default function RegistreInterventions({ centerId }) {
         kind: "wo",
         eventType: "corrective",
         eventDate: wo.date_intervention,
-        title: wo.panne_erreur,
+        title: wo.wo_number ? `${wo.panne_erreur} (WO #${wo.wo_number})` : wo.panne_erreur,
         commentaire: wo.commentaires,
         periods,
         raw: wo,
@@ -252,6 +253,7 @@ export default function RegistreInterventions({ centerId }) {
               <option value="controle_qualite">Contrôle de qualité</option>
               <option value="maintenance_preventive">Maintenance préventive</option>
               <option value="parametrage_machine">Paramétrage machine</option>
+              <option value="autre">Autre</option>
             </select>
           </Field>
           <Field label="Date début">
