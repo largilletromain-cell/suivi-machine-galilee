@@ -5,16 +5,18 @@ import ChangePasswordModal from "./components/ChangePasswordModal";
 import RegistrePannes from "./components/RegistrePannes";
 import WorkOrders from "./components/WorkOrders";
 import PanneTypesManager from "./components/PanneTypesManager";
+import Parametrage from "./components/Parametrage";
 
 const TOP_TABS = [
   { key: "pannes", label: "Registre Pannes" },
   { key: "wo", label: "Work Order" },
   { key: "types", label: "Liste des pannes" },
+  { key: "parametrage", label: "Paramétrage" },
 ];
 
 // L'accès "manipulateur" (sans mot de passe) donne accès au Registre Pannes et
-// à la Liste des pannes, mais pas à l'onglet Work Order.
-const MANIPULATEUR_TABS = TOP_TABS.filter((t) => t.key !== "wo");
+// à la Liste des pannes, mais pas à Work Order ni à Paramétrage.
+const MANIPULATEUR_TABS = TOP_TABS.filter((t) => t.key !== "wo" && t.key !== "parametrage");
 
 // Deux façons d'obtenir un accès "manipulateur" : le bouton dédié sur l'écran
 // d'accès, ou un lien direct du type https://votre-site.vercel.app/?vue=registre
@@ -190,6 +192,7 @@ export default function App() {
             {activeTab === "pannes" && <RegistrePannes centerId={center.id} />}
             {!restricted && activeTab === "wo" && <WorkOrders centerId={center.id} />}
             {activeTab === "types" && <PanneTypesManager />}
+            {!restricted && activeTab === "parametrage" && <Parametrage centerId={center.id} />}
           </>
         )}
       </main>
