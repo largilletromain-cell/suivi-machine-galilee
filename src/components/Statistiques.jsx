@@ -126,10 +126,15 @@ export default function Statistiques({ centerId }) {
     return Math.max(0, selectedStat.theoretical - selectedStat.totalDowntime);
   }, [selectedStat]);
 
-  // Projection : mois présents et futurs par rapport à aujourd'hui.
+  // Projection : 2 derniers mois, mois en cours, 3 prochains mois — parmi
+  // ceux où une disponibilité théorique a été saisie.
   const now = new Date();
   const currentKeyNum = now.getFullYear() * 12 + now.getMonth();
-  const projectionStats = stats.filter((s) => s.year * 12 + (s.month - 1) >= currentKeyNum);
+  const projectionWindowKeys = new Set();
+  for (let offset = -2; offset <= 3; offset++) {
+    projectionWindowKeys.add(currentKeyNum + offset);
+  }
+  const projectionStats = stats.filter((s) => projectionWindowKeys.has(s.year * 12 + (s.month - 1)));
 
   const donutData = useMemo(() => {
     if (!selectedStat) return [];
@@ -210,21 +215,41 @@ export default function Statistiques({ centerId }) {
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 12;
 
-      // En-tête texte (net, pas capturé en image).
-      doc.setFontSize(16);
-      doc.setFont(undefined, "bold");
-      doc.text(
-        `Rapport de disponibilité — ${activeMachine?.name ?? ""} — ${MONTHS_FR[selectedStat.month - 1]} ${selectedStat.year}`,
-        margin,
-        18
-      );
+      // Bannière d'en-tête stylisée (couleurs de la charte de l'application,
+      // dans l'esprit d'un rapport de groupe médical).
+      doc.setFillColor(20, 83, 91); // teal foncé
+      doc.rect(0, 0, pageWidth, 24, "F");
+      doc.setFillColor(240, 180, 41); // liseré ambre
+      doc.rect(0, 24, pageWidth, 1.2, "F");
 
-      const y = 26;
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8.5);
+      doc.setFont(undefined, "bold");
+      doc.text("GROUPE PSV — RADIOTHÉRAPIE & ONCOLOGIE", margin, 8);
+
+      doc.setFontSize(15);
+      doc.text(`Rapport de disponibilité — ${activeMachine?.name ?? ""}`, margin, 17);
+
+      doc.setFont(undefined, "normal");
+      doc.setFontSize(9.5);
+      doc.text(`${MONTHS_FR[selectedStat.month - 1]} ${selectedStat.year}`, pageWidth - margin, 17, { align: "right" });
+
+      doc.setTextColor(120, 130, 128);
+      doc.setFontSize(7.5);
+      doc.text(
+        `Généré le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR")}`,
+        pageWidth - margin,
+        22,
+        { align: "right" }
+      );
+      doc.setTextColor(0, 0, 0);
+
+      const y = 32;
 
       // Graphiques capturés en image.
       const imgWidth = pageWidth - margin * 2;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      const imgY = y + 6;
+      const imgY = y + 4;
       if (imgY + imgHeight > pageHeight - margin) {
         doc.addPage();
         doc.addImage(imgData, "PNG", margin, margin, imgWidth, imgHeight);
@@ -369,7 +394,7 @@ export default function Statistiques({ centerId }) {
 
               <Panel>
                 <h3 style={{ margin: "0 0 10px", fontSize: "0.9rem" }}>
-                  Projection du taux de disponibilité (mois en cours et suivants)
+                  Projection du taux de disponibilité (2 derniers mois, mois en cours, 3 prochains mois)
                 </h3>
                 {projectionStats.length === 0 ? (
                   <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>
@@ -405,7 +430,7 @@ export default function Statistiques({ centerId }) {
                   <h3 style={{ margin: "0 0 10px", fontSize: "0.9rem" }}>
                     Registre d'intervention — {MONTHS_FR[selectedStat.month - 1]} {selectedStat.year}
                   </h3>
-                  <MonthTable rows={rowsForMonth(selectedStat.year, selectedStat.month)} />
+                  <MonthTable rows={rowsForMonth(selectedStat.year, selectedStat.month)} taskColumnLabel="Tâches réalisées" />
                 </Panel>
 
                 {nextMonth && (
@@ -413,7 +438,7 @@ export default function Statistiques({ centerId }) {
                     <h3 style={{ margin: "0 0 10px", fontSize: "0.9rem" }}>
                       Interventions prévues — {MONTHS_FR[nextMonth.month - 1]} {nextMonth.year}
                     </h3>
-                    <MonthTable rows={rowsForMonth(nextMonth.year, nextMonth.month)} />
+                    <MonthTable rows={rowsForMonth(nextMonth.year, nextMonth.month)} taskColumnLabel="Description prévue" />
                   </Panel>
                 )}
               </div>
@@ -425,7 +450,7 @@ export default function Statistiques({ centerId }) {
   );
 }
 
-function MonthTable({ rows }) {
+function MonthTable({ rows, taskColumnLabel }) {
   if (rows.length === 0) {
     return <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Aucun événement.</p>;
   }
@@ -435,7 +460,7 @@ function MonthTable({ rows }) {
         <tr style={{ textAlign: "left", fontSize: "0.72rem", color: "var(--ink-soft)" }}>
           <th style={{ padding: "6px 8px" }}>Date</th>
           <th style={{ padding: "6px 8px" }}>Intitulé</th>
-          <th style={{ padding: "6px 8px" }}>Tâches réalisées</th>
+          <th style={{ padding: "6px 8px" }}>{taskColumnLabel}</th>
         </tr>
       </thead>
       <tbody>
