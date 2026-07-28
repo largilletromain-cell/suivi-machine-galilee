@@ -465,7 +465,7 @@ function SortHeader({ label, field, sort, onSort }) {
 }
 
 function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, onDelete, onOpenModal }) {
-  const hasDetails = periods.length > 0 || !!r.commentaires;
+  const hasDetails = periods.length > 0 || !!r.commentaires || !!r.resolved_via_maintenance;
   return (
     <>
       <tr style={{ borderTop: "1px solid var(--border)" }}>
@@ -566,6 +566,7 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
             >
               {expanded ? "▾" : "▸"} {periods.length > 0 ? `${periods.length} immo.` : ""}
               {r.commentaires ? " 💬" : ""}
+              {r.resolved_via_maintenance ? " 🔧" : ""}
             </button>
             <button
               onClick={onOpenModal}
@@ -591,6 +592,23 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
       {expanded && (
         <tr style={{ background: "var(--paper)" }}>
           <td colSpan={9} style={{ padding: "8px 8px 16px" }}>
+            {r.resolved_via_maintenance && (
+              <div
+                style={{
+                  display: "inline-block",
+                  background: "var(--status-ok-bg)",
+                  color: "var(--status-ok-ink)",
+                  borderRadius: 6,
+                  padding: "4px 10px",
+                  fontSize: "0.78rem",
+                  fontWeight: 600,
+                  marginBottom: 8,
+                }}
+              >
+                ✓ Résolu lors d'une maintenance préventive
+                {r.maintenance_date ? ` du ${formatDate(r.maintenance_date)}` : ""}
+              </div>
+            )}
             {periods.length > 0 && (
               <ul style={bulletListStyle}>
                 {periods.map((p) => (
@@ -615,68 +633,10 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
               style={{ width: "100%", resize: "vertical", fontSize: "0.85rem" }}
               placeholder="Détail de ce qui a été fait, échanges avec le prestataire, etc."
             />
-
-            <DocumentLinkField
-              value={r.lien_document || ""}
-              onSave={(v) => onUpdateField(r, "lien_document", v)}
-            />
           </td>
         </tr>
       )}
     </>
-  );
-}
-
-function DocumentLinkField({ value, onSave }) {
-  const [copied, setCopied] = useState(false);
-
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch (e) {
-      // le presse-papier peut être indisponible (contexte non sécurisé, permission refusée…)
-    }
-  }
-
-  return (
-    <div style={{ marginTop: 10 }}>
-      <label style={{ display: "block", fontSize: "0.7rem", color: "var(--ink-soft)", marginBottom: 4 }}>
-        Lien vers un document (chemin réseau, ex : {"\\\\10.104.42.3\\gestion_document\\test.pdf"})
-      </label>
-      <div style={{ display: "flex", gap: 6 }}>
-        <input
-          type="text"
-          defaultValue={value}
-          onBlur={(e) => onSave(e.target.value)}
-          placeholder="\\10.104.42.3\gestion_document\test.pdf"
-          className="mono"
-          style={{ flex: 1, fontSize: "0.8rem" }}
-        />
-        {value && (
-          <button
-            type="button"
-            onClick={handleCopy}
-            style={{
-              border: "1px solid var(--border)",
-              background: copied ? "var(--status-ok-bg)" : "var(--surface)",
-              color: copied ? "var(--status-ok-ink)" : "var(--ink-soft)",
-              borderRadius: 6,
-              padding: "4px 10px",
-              fontSize: "0.78rem",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {copied ? "Copié ✓" : "📋 Copier"}
-          </button>
-        )}
-      </div>
-      <p style={{ fontSize: "0.68rem", color: "var(--ink-soft)", margin: "4px 0 0" }}>
-        Les navigateurs bloquent l'ouverture directe des chemins réseau depuis un site web —
-        copiez le chemin puis collez-le dans l'explorateur de fichiers Windows (Cmd/Ctrl+V).
-      </p>
-    </div>
   );
 }
 
