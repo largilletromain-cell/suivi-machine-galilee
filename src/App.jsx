@@ -7,20 +7,22 @@ import WorkOrders from "./components/WorkOrders";
 import PanneTypesManager from "./components/PanneTypesManager";
 import Parametrage from "./components/Parametrage";
 import RegistreInterventions from "./components/RegistreInterventions";
+import Statistiques from "./components/Statistiques";
 
 const TOP_TABS = [
   { key: "pannes", label: "Registre Pannes" },
   { key: "wo", label: "Work Order" },
   { key: "interventions", label: "Registre des Interventions" },
+  { key: "stats", label: "Statistiques" },
   { key: "types", label: "Liste des pannes" },
   { key: "parametrage", label: "Paramétrage" },
 ];
 
 // L'accès "manipulateur" (sans mot de passe) donne accès au Registre Pannes et
-// à la Liste des pannes, mais pas à Work Order, Registre des Interventions ni
-// Paramétrage.
+// à la Liste des pannes, mais pas à Work Order, Registre des Interventions,
+// Statistiques ni Paramétrage.
 const MANIPULATEUR_TABS = TOP_TABS.filter(
-  (t) => t.key !== "wo" && t.key !== "parametrage" && t.key !== "interventions"
+  (t) => !["wo", "parametrage", "interventions", "stats"].includes(t.key)
 );
 
 // Deux façons d'obtenir un accès "manipulateur" : le bouton dédié sur l'écran
@@ -226,6 +228,7 @@ export default function App() {
             {!restricted && activeTab === "interventions" && (
               <RegistreInterventions centerId={centerId} />
             )}
+            {!restricted && activeTab === "stats" && <Statistiques centerId={centerId} />}
             {activeTab === "types" && <PanneTypesManager />}
             {!restricted && activeTab === "parametrage" && (
               <Parametrage centerId={centerId} centers={centers} onCentersChanged={setCenters} />
