@@ -191,7 +191,7 @@ export default function Statistiques({ centerId }) {
       });
       const imgData = canvas.toDataURL("image/png");
 
-      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 12;
@@ -310,47 +310,61 @@ export default function Statistiques({ centerId }) {
             </select>
           </div>
 
-          <div ref={reportRef} style={{ background: "var(--paper)" }}>
+          <div ref={reportRef} style={{ background: "#ffffff", padding: 4 }}>
             <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 18 }}>
               <Panel>
                 <h3 style={{ margin: "0 0 10px", fontSize: "0.9rem" }}>
                   Taux de disponibilité — {selectedStat && MONTHS_FR[selectedStat.month - 1]} {selectedStat?.year}
                 </h3>
                 {selectedStat?.theoretical ? (
-                  <div style={{ position: "relative", width: 300, height: 280 }}>
+                  <div style={{ position: "relative", width: 460, height: 400 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
                           data={donutData.length ? donutData : [{ key: "vide", name: "Aucune immobilisation", value: 1, color: "#e2e6e5" }]}
                           dataKey="value"
                           nameKey="name"
-                          innerRadius="60%"
-                          outerRadius="86%"
+                          innerRadius="55%"
+                          outerRadius="80%"
                           paddingAngle={donutData.length > 1 ? 2 : 0}
+                          label={
+                            donutData.length
+                              ? ({ value }) => `${value} h`
+                              : false
+                          }
+                          labelLine={donutData.length > 0}
                         >
                           {(donutData.length ? donutData : [{ color: "#e2e6e5" }]).map((d, i) => (
                             <Cell key={i} fill={d.color} stroke="none" />
                           ))}
                         </Pie>
                         {donutData.length > 0 && <Tooltip formatter={(v) => `${v} h`} />}
-                        <Legend verticalAlign="bottom" height={24} wrapperStyle={{ fontSize: "0.72rem" }} />
+                        <Legend
+                          verticalAlign="bottom"
+                          height={50}
+                          wrapperStyle={{ fontSize: "0.76rem" }}
+                          formatter={(value) => {
+                            const item = donutData.find((d) => d.name === value);
+                            return item ? `${value} — ${item.value.toFixed(1)} h` : value;
+                          }}
+                        />
                       </PieChart>
                     </ResponsiveContainer>
                     <div
                       style={{
                         position: "absolute",
-                        top: "40%",
+                        top: "38%",
                         left: "50%",
                         transform: "translate(-50%, -50%)",
                         textAlign: "center",
                         pointerEvents: "none",
                       }}
                     >
-                      <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "var(--ink)" }}>
+                      <div style={{ fontSize: "1.9rem", fontWeight: 700, color: "var(--ink)" }}>
                         {selectedStat.availabilityRate?.toFixed(1)}%
                       </div>
-                      <div style={{ fontSize: "0.68rem", color: "var(--ink-soft)" }}>disponibilité</div>
-                      <div style={{ fontSize: "0.72rem", color: "var(--ink-soft)", marginTop: 3 }} className="mono">
+                      <div style={{ fontSize: "0.72rem", color: "var(--ink-soft)" }}>disponibilité</div>
+                      <div style={{ fontSize: "0.78rem", color: "var(--ink-soft)", marginTop: 3 }} className="mono">
                         {availableHours?.toFixed(1)} h / {selectedStat.theoretical.toFixed(1)} h
                       </div>
                     </div>
@@ -371,7 +385,7 @@ export default function Statistiques({ centerId }) {
                     Aucun mois présent ou futur avec disponibilité théorique renseignée.
                   </p>
                 ) : (
-                  <ResponsiveContainer width={Math.max(360, projectionStats.length * 70)} height={280}>
+                  <ResponsiveContainer width={Math.max(460, projectionStats.length * 90)} height={400}>
                     <BarChart
                       data={projectionStats.map((s) => ({
                         label: monthLabel(s.year, s.month),
