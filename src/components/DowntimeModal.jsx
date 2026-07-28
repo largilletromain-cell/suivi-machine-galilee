@@ -12,6 +12,9 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
     workOrder.resolved_via_maintenance
   );
   const [maintenanceDate, setMaintenanceDate] = useState(workOrder.maintenance_date || "");
+  const [maintenanceCommentaire, setMaintenanceCommentaire] = useState(
+    workOrder.maintenance_commentaire || ""
+  );
   const [error, setError] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(emptyPeriod);
@@ -117,6 +120,7 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
         .update({
           resolved_via_maintenance: resolvedViaMaintenance,
           maintenance_date: resolvedViaMaintenance ? maintenanceDate || null : null,
+          maintenance_commentaire: resolvedViaMaintenance ? maintenanceCommentaire || null : null,
           statut: resolvedViaMaintenance ? "resolu" : workOrder.statut,
         })
         .eq("id", workOrder.id)
@@ -190,6 +194,16 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
                 type="date"
                 value={maintenanceDate}
                 onChange={(e) => setMaintenanceDate(e.target.value)}
+              />
+              <label style={{ display: "block", fontSize: "0.75rem", color: "var(--ink-soft)", margin: "8px 0 4px" }}>
+                Ce qui a été fait
+              </label>
+              <textarea
+                value={maintenanceCommentaire}
+                onChange={(e) => setMaintenanceCommentaire(e.target.value)}
+                rows={2}
+                placeholder="ex : remplacement de la pièce lors de la maintenance trimestrielle…"
+                style={{ width: "100%", resize: "vertical", fontSize: "0.85rem" }}
               />
             </div>
           )}

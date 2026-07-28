@@ -298,7 +298,7 @@ export default function WorkOrders({ centerId }) {
               value={form.panne_erreur}
               onChange={(e) => setForm({ ...form, panne_erreur: e.target.value })}
               required
-              style={{ width: "100%" }}
+              style={{ width: "100%", minWidth: 0, boxSizing: "border-box" }}
             />
           </Field>
           <Field label="#WO">
@@ -595,18 +595,21 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
             {r.resolved_via_maintenance && (
               <div
                 style={{
-                  display: "inline-block",
                   background: "var(--status-ok-bg)",
                   color: "var(--status-ok-ink)",
                   borderRadius: 6,
-                  padding: "4px 10px",
+                  padding: "6px 10px",
                   fontSize: "0.78rem",
-                  fontWeight: 600,
                   marginBottom: 8,
                 }}
               >
-                ✓ Résolu lors d'une maintenance préventive
-                {r.maintenance_date ? ` du ${formatDate(r.maintenance_date)}` : ""}
+                <div style={{ fontWeight: 600 }}>
+                  ✓ Résolu lors d'une maintenance préventive
+                  {r.maintenance_date ? ` du ${formatDate(r.maintenance_date)}` : ""}
+                </div>
+                {r.maintenance_commentaire && (
+                  <div style={{ marginTop: 2, fontWeight: 400 }}>{r.maintenance_commentaire}</div>
+                )}
               </div>
             )}
             {periods.length > 0 && (
@@ -642,9 +645,9 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
 
 function Field({ label, children }) {
   return (
-    <label style={{ display: "block", fontSize: "0.72rem", color: "var(--ink-soft)" }}>
+    <label style={{ display: "block", fontSize: "0.72rem", color: "var(--ink-soft)", minWidth: 0 }}>
       {label}
-      <div style={{ marginTop: 4 }}>{children}</div>
+      <div style={{ marginTop: 4, minWidth: 0 }}>{children}</div>
     </label>
   );
 }
