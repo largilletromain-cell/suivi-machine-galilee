@@ -20,13 +20,16 @@ function formatDate(iso) {
   return `${d}/${m}/${y}`;
 }
 
-// Palette par type d'événement — rouge pour le correctif (réactif à une
-// panne), teinte accent pour le contrôle qualité (routine technique), vert
-// pour le préventif planifié (proactif).
+// Palette dédiée, en teintes vives et bien distinctes (indépendante des
+// couleurs de statut utilisées ailleurs, plus douces et donc moins lisibles
+// comme repères de couleur ici) : rouge = correctif (réactif à une panne),
+// bleu = contrôle qualité, vert = préventif planifié, violet = paramétrage
+// machine.
 const EVENT_STYLES = {
-  corrective: { bg: "var(--status-bad-bg)", ink: "var(--status-bad-ink)", label: "Maintenance corrective" },
-  controle_qualite: { bg: "var(--accent-soft)", ink: "var(--accent-strong)", label: "Contrôle de qualité" },
-  maintenance_preventive: { bg: "var(--status-ok-bg)", ink: "var(--status-ok-ink)", label: "Maintenance préventive" },
+  corrective: { color: "#e0292a", bg: "#fdeaea", label: "Maintenance corrective" },
+  controle_qualite: { color: "#1565e0", bg: "#e8f0fe", label: "Contrôle de qualité" },
+  maintenance_preventive: { color: "#1a9c4b", bg: "#e7f7ed", label: "Maintenance préventive" },
+  parametrage_machine: { color: "#8b3fd1", bg: "#f3e8fc", label: "Paramétrage machine" },
 };
 
 const emptyForm = {
@@ -222,7 +225,7 @@ export default function RegistreInterventions({ centerId }) {
         <div style={{ display: "flex", gap: 14, marginBottom: 14, flexWrap: "wrap" }}>
           {Object.entries(EVENT_STYLES).map(([key, s]) => (
             <span key={key} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.78rem" }}>
-              <span style={{ width: 10, height: 10, borderRadius: 3, background: s.ink, display: "inline-block" }} />
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: s.color, display: "inline-block" }} />
               {s.label}
             </span>
           ))}
@@ -248,6 +251,7 @@ export default function RegistreInterventions({ centerId }) {
             >
               <option value="controle_qualite">Contrôle de qualité</option>
               <option value="maintenance_preventive">Maintenance préventive</option>
+              <option value="parametrage_machine">Paramétrage machine</option>
             </select>
           </Field>
           <Field label="Date début">
@@ -365,18 +369,26 @@ function EventRow({ row, onEdit, onDelete }) {
   const style = EVENT_STYLES[row.eventType] ?? EVENT_STYLES.corrective;
   return (
     <tr style={{ borderTop: "1px solid var(--border)" }}>
-      <td style={td} className="mono">
+      <td
+        style={{
+          ...td,
+          borderLeft: `3px solid ${style.color}`,
+          color: style.color,
+          fontWeight: 700,
+        }}
+        className="mono"
+      >
         {formatDate(row.eventDate)}
       </td>
       <td style={td}>
         <span
           style={{
             display: "inline-block",
-            width: 8,
-            height: 8,
-            borderRadius: 2,
-            background: style.ink,
-            marginRight: 6,
+            width: 9,
+            height: 9,
+            borderRadius: "50%",
+            background: style.color,
+            marginRight: 7,
           }}
         />
         <span style={{ fontWeight: row.kind === "wo" ? 400 : 600 }}>{row.title}</span>
