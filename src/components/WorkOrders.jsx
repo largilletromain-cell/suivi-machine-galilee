@@ -56,7 +56,7 @@ export default function WorkOrders({ centerId }) {
   const [error, setError] = useState("");
   const [modalWorkOrder, setModalWorkOrder] = useState(null);
   const [expandedIds, setExpandedIds] = useState(() => new Set());
-  const [sort, setSort] = useState({ field: null, dir: "asc" });
+  const [sort, setSort] = useState({ field: "date_decouverte", dir: "desc" });
 
   const [showAddEquipment, setShowAddEquipment] = useState(false);
   const [equipmentForm, setEquipmentForm] = useState(emptyEquipmentForm);
