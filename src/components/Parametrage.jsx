@@ -1,44 +1,279 @@
--- Migration à exécuter dans le SQL Editor Supabase (une seule fois).
--- Crée une table centrale "systems" qui pilote à la fois les sous-onglets du
--- Registre Pannes (uniquement pour les machines Radixact/Varian) et les
--- sous-onglets du Work Order (pour tous les systèmes, machines comme
--- logiciels).
+import { useEffect, useState } from "react";
+import { supabase, withRetry } from "../lib/supabaseClient";
+import { IconButton, Panel } from "./ui";
 
-create table if not exists systems (
-  id uuid primary key default gen_random_uuid(),
-  center_id uuid not null references centers(id) on delete cascade,
-  name text not null,
-  system_type text not null check (system_type in ('Radixact', 'Varian', 'Autre')),
-  serial_number text,
-  commissioning_date date,
-  -- lien vers la ligne Registre Pannes créée automatiquement (uniquement si
-  -- Radixact ou Varian) ; null pour un système "Autre" (ex : logiciel).
-  machine_id uuid references machines(id) on delete set null,
-  -- lien vers la ligne Work Order créée automatiquement (toujours renseigné).
-  wo_equipment_id uuid references wo_equipments(id) on delete set null,
-  sort_order int not null default 0,
-  created_at timestamptz not null default now()
-);
+const emptyForm = {
+  name: "",
+  system_type: "Radixact",
+  serial_number: "",
+  commissioning_date: "",
+};
 
-alter table systems enable row level security;
-drop policy if exists "anon_all_systems" on systems;
-create policy "anon_all_systems" on systems for all using (true) with check (true);
+export default function Parametrage({ centerId }) {
+  const [systems, setSystems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
--- Rétro-remplissage : fait apparaître dans Paramétrage tout ce qui existe déjà
--- (RX4010518, RX4010562, RayStation, Mosaiq, IMDS, Siemens Go.Sim, et toute
--- machine/équipement ajouté depuis les anciens boutons "+").
+  useEffect(() => {
+    load();
+  }, [centerId]);
 
--- 1) Machines déjà existantes, reliées à leur équipement Work Order homonyme
---    s'il existe.
-insert into systems (center_id, name, system_type, machine_id, wo_equipment_id, sort_order)
-select m.center_id, m.code, coalesce(m.machine_type, 'Autre'), m.id, we.id, m.sort_order
-from machines m
-left join wo_equipments we on we.center_id = m.center_id and we.code = m.code
-where not exists (select 1 from systems s where s.machine_id = m.id);
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await withRetry(() =>
+        supabase.from("systems").select("*").eq("center_id", centerId).order("sort_order")
+      );
+      setSystems(res.data ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }
 
--- 2) Équipements Work Order qui ne sont reliés à aucune machine (logiciels,
---    ou machines ajoutées uniquement côté Work Order).
-insert into systems (center_id, name, system_type, wo_equipment_id, sort_order)
-select we.center_id, we.code, 'Autre', we.id, we.sort_order
-from wo_equipments we
-where not exists (select 1 from systems s where s.wo_equipment_id = we.id);
+  async function handleCreate(e) {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      setError("Le nom de la machine / du logiciel est obligatoire.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const name = form.name.trim();
+      const sortOrder = systems.length;
+
+      // 1) Toujours créer le sous-onglet Work Order.
+      const { data: we, error: weError } = await supabase
+        .from("wo_equipments")
+        .insert({ center_id: centerId, code: name, label: name, sort_order: sortOrder })
+        .select()
+        .single();
+      if (weError) throw weError;
+
+      // 2) Radixact / Varian : créer aussi le sous-onglet Registre Pannes.
+      let machineId = null;
+      if (form.system_type === "Radixact" || form.system_type === "Varian") {
+        const { data: m, error: mError } = await supabase
+          .from("machines")
+          .insert({
+            center_id: centerId,
+            code: name,
+            label: name,
+            machine_type: form.system_type,
+            sort_order: sortOrder,
+          })
+          .select()
+          .single();
+        if (mError) throw mError;
+        machineId = m.id;
+      }
+
+      // 3) Enregistrer la fiche système elle-même.
+      const { error: sError } = await supabase.from("systems").insert({
+        center_id: centerId,
+        name,
+        system_type: form.system_type,
+        serial_number: form.serial_number || null,
+        commissioning_date: form.commissioning_date || null,
+        machine_id: machineId,
+        wo_equipment_id: we.id,
+        sort_order: sortOrder,
+      });
+      if (sError) throw sError;
+
+      setForm(emptyForm);
+      await load();
+    } catch (e) {
+      setError("Impossible de créer ce système (nom peut-être déjà utilisé).");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateField(system, field, value) {
+    setSystems((s) => s.map((x) => (x.id === system.id ? { ...x, [field]: value } : x)));
+    await withRetry(() => supabase.from("systems").update({ [field]: value }).eq("id", system.id));
+  }
+
+  async function handleDelete(system) {
+    const confirmMsg =
+      `Supprimer « ${system.name} » ?\n\n` +
+      "Cette action supprime aussi DÉFINITIVEMENT tout l'historique associé : " +
+      "les pannes du Registre Pannes et/ou les Work Orders et immobilisations liés " +
+      "à ce système. Cette action est irréversible.";
+    if (!window.confirm(confirmMsg)) return;
+
+    if (system.machine_id) {
+      await withRetry(() => supabase.from("machines").delete().eq("id", system.machine_id));
+    }
+    if (system.wo_equipment_id) {
+      await withRetry(() => supabase.from("wo_equipments").delete().eq("id", system.wo_equipment_id));
+    }
+    await withRetry(() => supabase.from("systems").delete().eq("id", system.id));
+    setSystems((s) => s.filter((x) => x.id !== system.id));
+  }
+
+  return (
+    <Panel>
+      <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem", marginTop: 0 }}>
+        Créez ici chaque machine ou logiciel à suivre. Un sous-onglet <strong>Work Order</strong> est
+        créé automatiquement pour tout système. Si le type est <strong>Radixact</strong> ou{" "}
+        <strong>Varian</strong>, un sous-onglet <strong>Registre Pannes</strong> est créé en plus.
+        Le nom et le type ne sont plus modifiables une fois créés (supprimez puis recréez si besoin).
+      </p>
+
+      <form
+        onSubmit={handleCreate}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1.3fr 140px 160px 150px auto",
+          gap: 8,
+          alignItems: "end",
+          marginBottom: 18,
+          paddingBottom: 18,
+          borderBottom: "1px solid var(--border)",
+        }}
+      >
+        <Field label="Nom de la machine / du logiciel">
+          <input
+            type="text"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder="ex : RX4010600 ou TrueBeam"
+            required
+            style={{ width: "100%", minWidth: 0 }}
+          />
+        </Field>
+        <Field label="Type">
+          <select
+            value={form.system_type}
+            onChange={(e) => setForm({ ...form, system_type: e.target.value })}
+            style={{ width: "100%" }}
+          >
+            <option value="Radixact">Radixact</option>
+            <option value="Varian">Varian</option>
+            <option value="Autre">Autre</option>
+          </select>
+        </Field>
+        <Field label="N° de série">
+          <input
+            type="text"
+            className="mono"
+            value={form.serial_number}
+            onChange={(e) => setForm({ ...form, serial_number: e.target.value })}
+            style={{ width: "100%", minWidth: 0 }}
+          />
+        </Field>
+        <Field label="Date de mise en service">
+          <input
+            type="date"
+            value={form.commissioning_date}
+            onChange={(e) => setForm({ ...form, commissioning_date: e.target.value })}
+          />
+        </Field>
+        <button
+          type="submit"
+          disabled={saving}
+          style={{
+            background: "var(--accent)",
+            color: "#fff",
+            border: "none",
+            borderRadius: 6,
+            padding: "8px 16px",
+            fontWeight: 600,
+            height: 34,
+          }}
+        >
+          {saving ? "…" : "Créer"}
+        </button>
+      </form>
+      {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem" }}>{error}</p>}
+
+      {loading ? (
+        <p style={{ color: "var(--ink-soft)" }}>Chargement…</p>
+      ) : systems.length === 0 ? (
+        <p style={{ color: "var(--ink-soft)" }}>Aucun système enregistré pour le moment.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--ink-soft)" }}>
+              <th style={th}>Nom</th>
+              <th style={th}>Type</th>
+              <th style={th}>N° de série</th>
+              <th style={th}>Mise en service</th>
+              <th style={th}>Registre Pannes</th>
+              <th style={th}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {systems.map((s) => (
+              <tr key={s.id} style={{ borderTop: "1px solid var(--border)" }}>
+                <td style={td}>{s.name}</td>
+                <td style={td}>
+                  <span className="code-chip" style={chip(s.system_type)}>
+                    {s.system_type}
+                  </span>
+                </td>
+                <td style={td}>
+                  <input
+                    type="text"
+                    className="mono"
+                    defaultValue={s.serial_number || ""}
+                    onBlur={(e) => updateField(s, "serial_number", e.target.value || null)}
+                    style={{ width: 150 }}
+                  />
+                </td>
+                <td style={td}>
+                  <input
+                    type="date"
+                    defaultValue={s.commissioning_date || ""}
+                    onBlur={(e) => updateField(s, "commissioning_date", e.target.value || null)}
+                    style={{ width: 140 }}
+                  />
+                </td>
+                <td style={td}>{s.machine_id ? "Oui" : "—"}</td>
+                <td style={td}>
+                  <IconButton title="Supprimer" danger onClick={() => handleDelete(s)}>
+                    ✕
+                  </IconButton>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Panel>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label style={{ display: "block", fontSize: "0.72rem", color: "var(--ink-soft)", minWidth: 0 }}>
+      {label}
+      <div style={{ marginTop: 4 }}>{children}</div>
+    </label>
+  );
+}
+
+function chip(type) {
+  const colors = {
+    Radixact: { bg: "var(--accent-soft)", ink: "var(--accent-strong)" },
+    Varian: { bg: "var(--status-warn-bg)", ink: "var(--status-warn-ink)" },
+    Autre: { bg: "var(--paper)", ink: "var(--ink-soft)" },
+  };
+  const c = colors[type] || colors.Autre;
+  return {
+    background: c.bg,
+    color: c.ink,
+    borderRadius: 4,
+    padding: "2px 8px",
+    fontSize: "0.72rem",
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+  };
+}
+
+const th = { padding: "6px 10px" };
+const td = { padding: "8px 10px", fontSize: "0.85rem", verticalAlign: "top" };
