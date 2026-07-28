@@ -13,10 +13,11 @@ const emptyHoursForm = () => ({
   hours: "",
 });
 
-export default function EditSystemModal({ system, onClose, onSaved }) {
+export default function EditSystemModal({ system, centers, onClose, onSaved }) {
   const [name, setName] = useState(system.name);
   const [serialNumber, setSerialNumber] = useState(system.serial_number || "");
   const [commissioningDate, setCommissioningDate] = useState(system.commissioning_date || "");
+  const [centerId, setCenterId] = useState(system.center_id);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -54,6 +55,7 @@ export default function EditSystemModal({ system, onClose, onSaved }) {
     setError("");
     try {
       const trimmedName = name.trim();
+      const centerChanged = centerId !== system.center_id;
       await withRetry(() =>
         supabase
           .from("systems")
@@ -61,21 +63,25 @@ export default function EditSystemModal({ system, onClose, onSaved }) {
             name: trimmedName,
             serial_number: serialNumber || null,
             commissioning_date: commissioningDate || null,
+            center_id: centerId,
           })
           .eq("id", system.id)
       );
       // Garder les sous-onglets Registre Pannes / Work Order synchronisés
-      // avec le nom si celui-ci a changé.
+      // avec le nom et le centre si l'un des deux a changé.
       if (system.machine_id) {
         await withRetry(() =>
-          supabase.from("machines").update({ code: trimmedName, label: trimmedName }).eq("id", system.machine_id)
+          supabase
+            .from("machines")
+            .update({ code: trimmedName, label: trimmedName, center_id: centerId })
+            .eq("id", system.machine_id)
         );
       }
       if (system.wo_equipment_id) {
         await withRetry(() =>
           supabase
             .from("wo_equipments")
-            .update({ code: trimmedName, label: trimmedName })
+            .update({ code: trimmedName, label: trimmedName, center_id: centerId })
             .eq("id", system.wo_equipment_id)
         );
       }
@@ -85,6 +91,8 @@ export default function EditSystemModal({ system, onClose, onSaved }) {
         name: trimmedName,
         serial_number: serialNumber || null,
         commissioning_date: commissioningDate || null,
+        center_id: centerId,
+        centerChanged,
       });
     } catch (e) {
       setError("Impossible d'enregistrer (nom peut-être déjà utilisé).");
@@ -168,6 +176,19 @@ export default function EditSystemModal({ system, onClose, onSaved }) {
             onChange={(e) => setName(e.target.value)}
             style={{ width: "100%", marginBottom: 10 }}
           />
+
+          <FieldLabel>Centre</FieldLabel>
+          <select
+            value={centerId}
+            onChange={(e) => setCenterId(e.target.value)}
+            style={{ width: "100%", marginBottom: 10 }}
+          >
+            {(centers || []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
 
           <FieldLabel>
             Type — <span style={{ fontWeight: 400 }}>{system.system_type} (fixe, non modifiable)</span>

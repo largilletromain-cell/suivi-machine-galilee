@@ -384,9 +384,14 @@ export default function Parametrage({ centerId, centers, onCentersChanged }) {
         {editingSystem && (
           <EditSystemModal
             system={editingSystem}
+            centers={centers}
             onClose={() => setEditingSystem(null)}
             onSaved={(updated) => {
-              setSystems((s) => s.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)));
+              if (updated.centerChanged) {
+                setSystems((s) => s.filter((x) => x.id !== updated.id));
+              } else {
+                setSystems((s) => s.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)));
+              }
             }}
           />
         )}
