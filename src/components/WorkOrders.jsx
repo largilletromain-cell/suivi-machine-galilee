@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, Fragment } from "react";
 import { supabase, withRetry } from "../lib/supabaseClient";
 import { SubTabs, IconButton, Panel, statusSelectStyle } from "./ui";
 import DowntimeModal from "./DowntimeModal";
@@ -17,6 +17,18 @@ const emptyEquipmentForm = { code: "", label: "" };
 
 const STATUT_RANK = { non_resolu: 0, en_surveillance: 1, resolu: 2 };
 const STATUT_WO_RANK = { ouvert: 0, ferme: 1 };
+
+const MONTHS_FR = [
+  "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+  "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
+];
+
+function formatMonthYear(iso) {
+  if (!iso) return "Sans date de découverte";
+  const [y, m] = iso.split("-");
+  const idx = parseInt(m, 10) - 1;
+  return `${MONTHS_FR[idx] || m} ${y}`;
+}
 
 function compareRows(a, b, field) {
   switch (field) {
@@ -375,23 +387,43 @@ export default function WorkOrders({ centerId }) {
               </tr>
             </thead>
             <tbody>
-              {sortedRows.map((r) => {
-                const periods = (r.downtime_periods ?? []).slice().sort((a, b) =>
-                  (a.date_debut || "").localeCompare(b.date_debut || "")
-                );
-                return (
-                  <RowGroup
-                    key={r.id}
-                    row={r}
-                    periods={periods}
-                    expanded={expandedIds.has(r.id)}
-                    onToggleExpand={() => toggleExpand(r.id)}
-                    onUpdateField={updateField}
-                    onDelete={handleDelete}
-                    onOpenModal={() => setModalWorkOrder(r)}
-                  />
-                );
-              })}
+              {(() => {
+                const groupByMonth = sort.field === "date_decouverte";
+                let lastMonthKey;
+                return sortedRows.map((r) => {
+                  const periods = (r.downtime_periods ?? []).slice().sort((a, b) =>
+                    (a.date_debut || "").localeCompare(b.date_debut || "")
+                  );
+                  let monthSeparator = null;
+                  if (groupByMonth) {
+                    const monthKey = (r.date_decouverte || "").slice(0, 7) || "none";
+                    if (monthKey !== lastMonthKey) {
+                      lastMonthKey = monthKey;
+                      monthSeparator = (
+                        <tr key={`month-${monthKey}`}>
+                          <td colSpan={9} style={monthSeparatorStyle}>
+                            {formatMonthYear(r.date_decouverte)}
+                          </td>
+                        </tr>
+                      );
+                    }
+                  }
+                  return (
+                    <Fragment key={r.id}>
+                      {monthSeparator}
+                      <RowGroup
+                        row={r}
+                        periods={periods}
+                        expanded={expandedIds.has(r.id)}
+                        onToggleExpand={() => toggleExpand(r.id)}
+                        onUpdateField={updateField}
+                        onDelete={handleDelete}
+                        onOpenModal={() => setModalWorkOrder(r)}
+                      />
+                    </Fragment>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         )}
@@ -437,20 +469,36 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
   return (
     <>
       <tr style={{ borderTop: "1px solid var(--border)" }}>
-        <td style={td} className="mono">
-          {formatDate(r.date_decouverte)}
-        </td>
-        <td style={{ ...td, minWidth: 200 }}>
+        <td style={td}>
           <input
-            type="text"
+            type="date"
+            className="mono"
+            defaultValue={r.date_decouverte || ""}
+            onBlur={(e) => onUpdateField(r, "date_decouverte", e.target.value || null)}
+            style={{ width: 130 }}
+          />
+        </td>
+        <td style={{ ...td, minWidth: 220 }}>
+          <textarea
             defaultValue={r.panne_erreur}
             onBlur={(e) => {
               e.target.style.border = "1px solid transparent";
               if (e.target.value.trim()) onUpdateField(r, "panne_erreur", e.target.value.trim());
               else e.target.value = r.panne_erreur;
             }}
-            style={{ width: "100%", border: "1px solid transparent", background: "transparent", padding: "4px 6px" }}
             onFocus={(e) => (e.target.style.border = "1px solid var(--border)")}
+            rows={2}
+            style={{
+              width: "100%",
+              minWidth: 220,
+              border: "1px solid transparent",
+              background: "transparent",
+              padding: "4px 6px",
+              resize: "vertical",
+              fontFamily: "inherit",
+              fontSize: "0.85rem",
+              lineHeight: 1.35,
+            }}
           />
         </td>
         <td style={td}>
@@ -567,10 +615,68 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
               style={{ width: "100%", resize: "vertical", fontSize: "0.85rem" }}
               placeholder="Détail de ce qui a été fait, échanges avec le prestataire, etc."
             />
+
+            <DocumentLinkField
+              value={r.lien_document || ""}
+              onSave={(v) => onUpdateField(r, "lien_document", v)}
+            />
           </td>
         </tr>
       )}
     </>
+  );
+}
+
+function DocumentLinkField({ value, onSave }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (e) {
+      // le presse-papier peut être indisponible (contexte non sécurisé, permission refusée…)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <label style={{ display: "block", fontSize: "0.7rem", color: "var(--ink-soft)", marginBottom: 4 }}>
+        Lien vers un document (chemin réseau, ex : {"\\\\10.104.42.3\\gestion_document\\test.pdf"})
+      </label>
+      <div style={{ display: "flex", gap: 6 }}>
+        <input
+          type="text"
+          defaultValue={value}
+          onBlur={(e) => onSave(e.target.value)}
+          placeholder="\\10.104.42.3\gestion_document\test.pdf"
+          className="mono"
+          style={{ flex: 1, fontSize: "0.8rem" }}
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={handleCopy}
+            style={{
+              border: "1px solid var(--border)",
+              background: copied ? "var(--status-ok-bg)" : "var(--surface)",
+              color: copied ? "var(--status-ok-ink)" : "var(--ink-soft)",
+              borderRadius: 6,
+              padding: "4px 10px",
+              fontSize: "0.78rem",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {copied ? "Copié ✓" : "📋 Copier"}
+          </button>
+        )}
+      </div>
+      <p style={{ fontSize: "0.68rem", color: "var(--ink-soft)", margin: "4px 0 0" }}>
+        Les navigateurs bloquent l'ouverture directe des chemins réseau depuis un site web —
+        copiez le chemin puis collez-le dans l'explorateur de fichiers Windows (Cmd/Ctrl+V).
+      </p>
+    </div>
   );
 }
 
@@ -593,3 +699,14 @@ const th = { padding: "6px 8px" };
 const td = { padding: "6px 8px", fontSize: "0.82rem", verticalAlign: "top" };
 const bulletListStyle = { margin: "0 0 0", paddingLeft: 16, listStyle: "circle" };
 const subBulletStyle = { fontSize: "0.78rem", marginBottom: 4 };
+const monthSeparatorStyle = {
+  padding: "10px 8px 6px",
+  fontSize: "0.72rem",
+  fontWeight: 700,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
+  color: "var(--accent-strong)",
+  borderTop: "2px solid var(--accent)",
+  borderBottom: "1px solid var(--border)",
+  background: "var(--accent-soft)",
+};
