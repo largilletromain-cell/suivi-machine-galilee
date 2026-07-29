@@ -59,6 +59,7 @@ export default function Statistiques({ centerId }) {
   const [theoreticalHours, setTheoreticalHours] = useState([]);
   const [workOrders, setWorkOrders] = useState([]);
   const [interventions, setInterventions] = useState([]);
+  const [pannes, setPannes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonthKey, setSelectedMonthKey] = useState(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
@@ -85,8 +86,9 @@ export default function Statistiques({ centerId }) {
     setLoading(true);
     const system = machines.find((m) => m.id === systemId);
     const equipmentId = system?.wo_equipment_id;
+    const machineId = system?.machine_id;
     try {
-      const [hoursRes, woRes, intRes] = await Promise.all([
+      const [hoursRes, woRes, intRes, pannesRes] = await Promise.all([
         withRetry(() => supabase.from("availability_theoretical_hours").select("*").eq("system_id", systemId)),
         equipmentId
           ? withRetry(() =>
@@ -99,10 +101,14 @@ export default function Statistiques({ centerId }) {
         equipmentId
           ? withRetry(() => supabase.from("interventions").select("*").eq("equipment_id", equipmentId))
           : Promise.resolve({ data: [] }),
+        machineId
+          ? withRetry(() => supabase.from("pannes").select("id, date_panne").eq("machine_id", machineId))
+          : Promise.resolve({ data: [] }),
       ]);
       setTheoreticalHours(hoursRes.data ?? []);
       setWorkOrders(woRes.data ?? []);
       setInterventions(intRes.data ?? []);
+      setPannes(pannesRes.data ?? []);
 
       const months = (hoursRes.data ?? [])
         .map((h) => `${h.year}-${h.month}`)
@@ -199,6 +205,32 @@ export default function Statistiques({ centerId }) {
     const prefix = `${year}-${String(month).padStart(2, "0")}`;
     return unifiedRows.filter((r) => r.eventDate.startsWith(prefix));
   }
+
+  // Work Orders ouverts (découverts) sur la machine durant le mois sélectionné.
+  const woOpenedThisMonth = useMemo(() => {
+    if (!selectedStat) return [];
+    const prefix = `${selectedStat.year}-${String(selectedStat.month).padStart(2, "0")}`;
+    return workOrders
+      .filter((wo) => wo.date_decouverte?.startsWith(prefix))
+      .sort((a, b) => (a.date_decouverte || "").localeCompare(b.date_decouverte || ""));
+  }, [workOrders, selectedStat]);
+
+  // Évolution sur 12 mois glissants : nombre de WO ouverts et de pannes
+  // signalées par mois.
+  const trend12Months = useMemo(() => {
+    const nowD = new Date();
+    const monthsList = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(nowD.getFullYear(), nowD.getMonth() - i, 1);
+      monthsList.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+    }
+    return monthsList.map(({ year, month }) => {
+      const prefix = `${year}-${String(month).padStart(2, "0")}`;
+      const woCount = workOrders.filter((wo) => wo.date_decouverte?.startsWith(prefix)).length;
+      const panneCount = pannes.filter((p) => p.date_panne?.startsWith(prefix)).length;
+      return { label: monthLabel(year, month), wo: woCount, pannes: panneCount };
+    });
+  }, [workOrders, pannes]);
 
   const nextMonth = useMemo(() => {
     if (!selectedMonthKey) return null;
@@ -445,10 +477,34 @@ export default function Statistiques({ centerId }) {
                   </ResponsiveContainer>
                 )}
               </Panel>
+
+              <Panel>
+                <h3 style={{ margin: "0 0 10px", fontSize: "0.9rem" }}>
+                  Évolution sur 12 mois glissants — WO ouverts / pannes signalées
+                </h3>
+                <ResponsiveContainer width={620} height={340}>
+                  <BarChart data={trend12Months}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} angle={-35} textAnchor="end" height={50} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip />
+                    <Legend wrapperStyle={{ fontSize: "0.72rem" }} />
+                    <Bar dataKey="wo" fill={BRAND.blue} name="WO ouverts" />
+                    <Bar dataKey="pannes" fill={EVENT_STYLES.corrective.color} name="Pannes signalées" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Panel>
             </div>
 
             {selectedStat && (
               <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+                <Panel>
+                  <h3 style={{ margin: "0 0 10px", fontSize: "0.9rem" }}>
+                    Work Orders ouverts — {MONTHS_FR[selectedStat.month - 1]} {selectedStat.year}
+                  </h3>
+                  <WoOpenedTable rows={woOpenedThisMonth} />
+                </Panel>
+
                 <Panel>
                   <h3 style={{ margin: "0 0 10px", fontSize: "0.9rem" }}>
                     Registre d'intervention — {MONTHS_FR[selectedStat.month - 1]} {selectedStat.year}
@@ -513,6 +569,40 @@ function MonthTable({ rows, taskColumnLabel }) {
             </tr>
           );
         })}
+      </tbody>
+    </table>
+  );
+}
+
+function WoOpenedTable({ rows }) {
+  if (rows.length === 0) {
+    return <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Aucun Work Order ouvert ce mois-ci.</p>;
+  }
+  return (
+    <table>
+      <thead>
+        <tr style={{ textAlign: "left", fontSize: "0.72rem", color: "var(--ink-soft)" }}>
+          <th style={{ padding: "6px 8px" }}>Découverte</th>
+          <th style={{ padding: "6px 8px" }}>Panne / erreur</th>
+          <th style={{ padding: "6px 8px" }}>#WO</th>
+          <th style={{ padding: "6px 8px" }}>Statut</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((wo) => (
+          <tr key={wo.id} style={{ borderTop: "1px solid var(--border)" }}>
+            <td style={{ padding: "6px 8px", fontSize: "0.82rem" }} className="mono">
+              {formatDate(wo.date_decouverte)}
+            </td>
+            <td style={{ padding: "6px 8px", fontSize: "0.82rem" }}>{wo.panne_erreur}</td>
+            <td style={{ padding: "6px 8px", fontSize: "0.82rem" }} className="mono">
+              {wo.wo_number || "—"}
+            </td>
+            <td style={{ padding: "6px 8px", fontSize: "0.8rem", color: "var(--ink-soft)" }}>
+              {wo.statut === "resolu" ? "Résolu" : wo.statut === "en_surveillance" ? "En surveillance" : "Non résolu"}
+            </td>
+          </tr>
+        ))}
       </tbody>
     </table>
   );
