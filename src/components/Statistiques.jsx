@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  ReferenceLine,
 } from "recharts";
 import { supabase, withRetry } from "../lib/supabaseClient";
 import { SubTabs, Panel } from "./ui";
@@ -231,6 +232,12 @@ export default function Statistiques({ centerId }) {
       return { label: monthLabel(year, month), wo: woCount, pannes: panneCount };
     });
   }, [workOrders, pannes]);
+
+  const avgPannesPerMonth = useMemo(() => {
+    if (trend12Months.length === 0) return 0;
+    const total = trend12Months.reduce((sum, m) => sum + m.pannes, 0);
+    return total / trend12Months.length;
+  }, [trend12Months]);
 
   const nextMonth = useMemo(() => {
     if (!selectedMonthKey) return null;
@@ -491,6 +498,18 @@ export default function Statistiques({ centerId }) {
                     <Legend wrapperStyle={{ fontSize: "0.72rem" }} />
                     <Bar dataKey="wo" fill={BRAND.blue} name="WO ouverts" />
                     <Bar dataKey="pannes" fill={EVENT_STYLES.corrective.color} name="Pannes signalées" />
+                    <ReferenceLine
+                      y={avgPannesPerMonth}
+                      stroke="red"
+                      strokeDasharray="6 4"
+                      strokeWidth={2}
+                      label={{
+                        value: `Moyenne pannes : ${avgPannesPerMonth.toFixed(1)}`,
+                        position: "insideTopRight",
+                        fill: "red",
+                        fontSize: 11,
+                      }}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </Panel>

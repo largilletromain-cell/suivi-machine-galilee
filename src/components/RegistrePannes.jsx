@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import { supabase, withRetry } from "../lib/supabaseClient";
 import { SubTabs, IconButton, Panel } from "./ui";
 
+const MONTHS_FR = [
+  "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+  "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
+];
+
 function todayISO() {
   const d = new Date();
   return d.toISOString().slice(0, 10);
@@ -10,6 +15,15 @@ function todayISO() {
 function nowHHMM() {
   const d = new Date();
   return d.toTimeString().slice(0, 5);
+}
+
+function currentMonthKey() {
+  return todayISO().slice(0, 7);
+}
+
+function formatMonthKey(key) {
+  const [y, m] = key.split("-");
+  return `${MONTHS_FR[parseInt(m, 10) - 1] || m} ${y}`;
 }
 
 function defaultForm() {
@@ -26,7 +40,10 @@ export default function RegistrePannes({ centerId }) {
   const [machines, setMachines] = useState([]);
   const [activeMachineId, setActiveMachineId] = useState(null);
   const [panneTypes, setPanneTypes] = useState([]);
-  const [rows, setRows] = useState([]);
+  const [monthCounts, setMonthCounts] = useState([]); // [{key, count}] tri desc
+  const [rowsByMonth, setRowsByMonth] = useState({});
+  const [loadingMonths, setLoadingMonths] = useState(() => new Set());
+  const [expandedMonths, setExpandedMonths] = useState(() => new Set([currentMonthKey()]));
   const [form, setForm] = useState(defaultForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -39,8 +56,8 @@ export default function RegistrePannes({ centerId }) {
   useEffect(() => {
     if (!activeMachineId) return;
     const machine = machines.find((m) => m.id === activeMachineId);
-    loadRows(activeMachineId);
     loadPanneTypes(machine?.machine_type);
+    initMonths(activeMachineId);
   }, [activeMachineId, machines]);
 
   async function loadMachines() {
@@ -60,24 +77,96 @@ export default function RegistrePannes({ centerId }) {
     setPanneTypes(res.data ?? []);
   }
 
-  async function loadRows(machineId) {
-    setLoading(true);
-    setError("");
+  // Ne récupère qu'une seule colonne (date_panne) pour construire la liste des
+  // mois disponibles, sans charger tout le détail des pannes — c'est ce qui
+  // évite la latence au chargement de la page.
+  async function loadMonthCounts(machineId) {
+    const res = await withRetry(() =>
+      supabase.from("pannes").select("date_panne").eq("machine_id", machineId)
+    );
+    const counts = {};
+    (res.data ?? []).forEach((r) => {
+      const key = r.date_panne?.slice(0, 7);
+      if (key) counts[key] = (counts[key] || 0) + 1;
+    });
+    const list = Object.entries(counts)
+      .map(([key, count]) => ({ key, count }))
+      .sort((a, b) => b.key.localeCompare(a.key));
+    setMonthCounts(list);
+    return list;
+  }
+
+  async function loadMonthRows(machineId, monthKey) {
+    setLoadingMonths((s) => new Set(s).add(monthKey));
     try {
+      const start = `${monthKey}-01`;
+      const [y, m] = monthKey.split("-").map(Number);
+      const endDate = new Date(y, m, 0).getDate(); // dernier jour du mois
+      const end = `${monthKey}-${String(endDate).padStart(2, "0")}`;
       const res = await withRetry(() =>
         supabase
           .from("pannes")
           .select("*, panne_types(code, description), work_order_pannes(work_orders(id, wo_number))")
           .eq("machine_id", machineId)
+          .gte("date_panne", start)
+          .lte("date_panne", end)
           .order("date_panne", { ascending: false })
           .order("heure_debut", { ascending: false })
       );
-      setRows(res.data ?? []);
+      setRowsByMonth((prev) => ({ ...prev, [monthKey]: res.data ?? [] }));
+    } finally {
+      setLoadingMonths((s) => {
+        const next = new Set(s);
+        next.delete(monthKey);
+        return next;
+      });
+    }
+  }
+
+  async function initMonths(machineId) {
+    setLoading(true);
+    setError("");
+    try {
+      const list = await loadMonthCounts(machineId);
+      const cKey = currentMonthKey();
+      setExpandedMonths(new Set([cKey]));
+      setRowsByMonth({});
+      // Charge le mois en cours par défaut, qu'il ait déjà des pannes ou non.
+      if (list.some((m) => m.key === cKey)) {
+        await loadMonthRows(machineId, cKey);
+      } else {
+        setRowsByMonth({ [cKey]: [] });
+      }
     } catch (e) {
       setError("Erreur de chargement du registre de pannes.");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function refreshAfterChange(monthKey) {
+    const list = await loadMonthCounts(activeMachineId);
+    // recharge tous les mois actuellement dépliés + celui concerné par le changement
+    const toReload = new Set(expandedMonths);
+    if (monthKey) toReload.add(monthKey);
+    for (const key of toReload) {
+      if (list.some((m) => m.key === key) || key === currentMonthKey()) {
+        await loadMonthRows(activeMachineId, key);
+      }
+    }
+  }
+
+  function toggleMonth(monthKey) {
+    setExpandedMonths((s) => {
+      const next = new Set(s);
+      if (next.has(monthKey)) {
+        next.delete(monthKey);
+      } else {
+        next.add(monthKey);
+        if (!rowsByMonth[monthKey]) loadMonthRows(activeMachineId, monthKey);
+      }
+      return next;
+    });
   }
 
   async function handleAdd(e) {
@@ -103,8 +192,10 @@ export default function RegistrePannes({ centerId }) {
           commentaire: form.commentaire || null,
         })
       );
+      const monthKey = form.date_panne.slice(0, 7);
       setForm(defaultForm());
-      await loadRows(activeMachineId);
+      setExpandedMonths((s) => new Set(s).add(monthKey));
+      await refreshAfterChange(monthKey);
     } catch (e) {
       setError("Impossible d'enregistrer cette panne. Réessayez.");
     } finally {
@@ -114,13 +205,13 @@ export default function RegistrePannes({ centerId }) {
 
   async function updateField(row, field, value) {
     await withRetry(() => supabase.from("pannes").update({ [field]: value }).eq("id", row.id));
-    await loadRows(activeMachineId);
+    await refreshAfterChange(value && field === "date_panne" ? value.slice(0, 7) : null);
   }
 
-  async function handleDelete(id) {
+  async function handleDelete(id, monthKey) {
     if (!window.confirm("Supprimer cette ligne du registre de pannes ?")) return;
     await withRetry(() => supabase.from("pannes").delete().eq("id", id));
-    setRows((r) => r.filter((row) => row.id !== id));
+    await refreshAfterChange(monthKey);
   }
 
   return (
@@ -217,127 +308,214 @@ export default function RegistrePannes({ centerId }) {
           </button>
         </form>
 
-        {error && (
-          <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem" }}>{error}</p>
-        )}
+        {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem" }}>{error}</p>}
 
         {loading ? (
           <p style={{ color: "var(--ink-soft)" }}>Chargement…</p>
-        ) : rows.length === 0 ? (
-          <p style={{ color: "var(--ink-soft)" }}>Aucune panne enregistrée pour cette machine.</p>
         ) : (
-          <table>
-            <thead>
-              <tr style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--ink-soft)" }}>
-                <th style={th}>WO</th>
-                <th style={th}>Date</th>
-                <th style={th}>Début</th>
-                <th style={th}>Fin</th>
-                <th style={th}>Erreur</th>
-                <th style={th}>Commentaire</th>
-                <th style={th}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const linkedWos = (r.work_order_pannes ?? []).map((wp) => wp.work_orders).filter(Boolean);
-                return (
-                <tr key={r.id} style={{ borderTop: "1px solid var(--border)" }}>
-                  <td style={td}>
-                    {linkedWos.length > 0 ? (
-                      linkedWos.map((wo) => (
-                        <span
-                          key={wo.id}
-                          title="Panne prise en compte par ce Work Order"
-                          className="mono"
-                          style={{
-                            display: "inline-block",
-                            background: "var(--status-ok-bg)",
-                            color: "var(--status-ok-ink)",
-                            borderRadius: 4,
-                            padding: "2px 6px",
-                            fontSize: "0.72rem",
-                            fontWeight: 600,
-                            marginRight: 4,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {wo.wo_number ? `#${wo.wo_number}` : "WO lié"}
-                        </span>
-                      ))
-                    ) : (
-                      <span style={{ color: "var(--ink-soft)" }}>—</span>
-                    )}
-                  </td>
-                  <td style={td}>
-                    <input
-                      type="date"
-                      defaultValue={r.date_panne}
-                      onBlur={(e) => e.target.value && updateField(r, "date_panne", e.target.value)}
-                      style={{ width: 130 }}
-                    />
-                  </td>
-                  <td style={{ ...td }}>
-                    <input
-                      type="time"
-                      className="mono"
-                      defaultValue={r.heure_debut?.slice(0, 5)}
-                      onBlur={(e) => e.target.value && updateField(r, "heure_debut", e.target.value)}
-                      style={{ width: 100 }}
-                    />
-                  </td>
-                  <td style={{ ...td }}>
-                    <input
-                      type="time"
-                      className="mono"
-                      defaultValue={r.heure_fin?.slice(0, 5) || ""}
-                      onBlur={(e) => updateField(r, "heure_fin", e.target.value || null)}
-                      style={{ width: 100 }}
-                    />
-                  </td>
-                  <td style={td}>
-                    <select
-                      value={r.panne_type_id || ""}
-                      onChange={(e) => updateField(r, "panne_type_id", e.target.value || null)}
-                      style={{ width: "100%", fontSize: "0.82rem" }}
-                    >
-                      <option value="">— Aucune —</option>
-                      {!panneTypes.some((pt) => pt.id === r.panne_type_id) && r.panne_types && (
-                        <option value={r.panne_type_id}>
-                          {r.panne_types.code ? `[${r.panne_types.code}] ` : ""}
-                          {r.panne_types.description}
-                        </option>
-                      )}
-                      {panneTypes.map((pt) => (
-                        <option key={pt.id} value={pt.id}>
-                          {pt.code ? `[${pt.code}] ` : ""}
-                          {pt.description}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td style={td}>
-                    <input
-                      type="text"
-                      defaultValue={r.commentaire || ""}
-                      onBlur={(e) => updateField(r, "commentaire", e.target.value || null)}
-                      placeholder="Optionnel"
-                      style={{ width: "100%" }}
-                    />
-                  </td>
-                  <td style={td}>
-                    <IconButton title="Supprimer" danger onClick={() => handleDelete(r.id)}>
-                      ✕
-                    </IconButton>
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <MonthsList
+            monthCounts={monthCounts}
+            expandedMonths={expandedMonths}
+            rowsByMonth={rowsByMonth}
+            loadingMonths={loadingMonths}
+            onToggle={toggleMonth}
+            panneTypes={panneTypes}
+            onUpdateField={updateField}
+            onDelete={handleDelete}
+          />
         )}
       </Panel>
     </div>
+  );
+}
+
+function MonthsList({
+  monthCounts,
+  expandedMonths,
+  rowsByMonth,
+  loadingMonths,
+  onToggle,
+  panneTypes,
+  onUpdateField,
+  onDelete,
+}) {
+  const cKey = currentMonthKey();
+  // Le mois en cours apparaît toujours en premier, même sans pannes.
+  const keys = monthCounts.map((m) => m.key);
+  const allKeys = keys.includes(cKey) ? keys : [cKey, ...keys];
+  const countByKey = Object.fromEntries(monthCounts.map((m) => [m.key, m.count]));
+
+  if (allKeys.length === 0) {
+    return <p style={{ color: "var(--ink-soft)" }}>Aucune panne enregistrée pour cette machine.</p>;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {allKeys.map((monthKey) => {
+        const expanded = expandedMonths.has(monthKey);
+        const count = countByKey[monthKey] || 0;
+        const rows = rowsByMonth[monthKey];
+        const isLoading = loadingMonths.has(monthKey);
+        return (
+          <div key={monthKey} style={{ border: "1px solid var(--border)", borderRadius: 8 }}>
+            <button
+              onClick={() => onToggle(monthKey)}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                border: "none",
+                background: monthKey === cKey ? "var(--accent-soft)" : "var(--paper)",
+                padding: "8px 12px",
+                fontSize: "0.82rem",
+                fontWeight: 700,
+                color: "var(--accent-strong)",
+                borderRadius: expanded ? "8px 8px 0 0" : 8,
+                display: "flex",
+                justifyContent: "space-between",
+              }}
+            >
+              <span>
+                {expanded ? "▾" : "▸"} {formatMonthKey(monthKey)}
+                {monthKey === cKey ? " (mois en cours)" : ""}
+              </span>
+              <span className="mono">{count} panne{count !== 1 ? "s" : ""}</span>
+            </button>
+            {expanded && (
+              <div style={{ padding: "10px 12px" }}>
+                {isLoading || !rows ? (
+                  <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem", margin: 0 }}>Chargement…</p>
+                ) : rows.length === 0 ? (
+                  <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem", margin: 0 }}>
+                    Aucune panne ce mois-ci.
+                  </p>
+                ) : (
+                  <PannesTable
+                    rows={rows}
+                    panneTypes={panneTypes}
+                    onUpdateField={onUpdateField}
+                    onDelete={(id) => onDelete(id, monthKey)}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PannesTable({ rows, panneTypes, onUpdateField, onDelete }) {
+  return (
+    <table>
+      <thead>
+        <tr style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--ink-soft)" }}>
+          <th style={th}>WO</th>
+          <th style={th}>Date</th>
+          <th style={th}>Début</th>
+          <th style={th}>Fin</th>
+          <th style={th}>Erreur</th>
+          <th style={th}>Commentaire</th>
+          <th style={th}></th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => {
+          const linkedWos = (r.work_order_pannes ?? []).map((wp) => wp.work_orders).filter(Boolean);
+          return (
+            <tr key={r.id} style={{ borderTop: "1px solid var(--border)" }}>
+              <td style={td}>
+                {linkedWos.length > 0 ? (
+                  linkedWos.map((wo) => (
+                    <span
+                      key={wo.id}
+                      title="Panne prise en compte par ce Work Order"
+                      className="mono"
+                      style={{
+                        display: "inline-block",
+                        background: "var(--status-ok-bg)",
+                        color: "var(--status-ok-ink)",
+                        borderRadius: 4,
+                        padding: "2px 6px",
+                        fontSize: "0.72rem",
+                        fontWeight: 600,
+                        marginRight: 4,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {wo.wo_number ? `#${wo.wo_number}` : "WO lié"}
+                    </span>
+                  ))
+                ) : (
+                  <span style={{ color: "var(--ink-soft)" }}>—</span>
+                )}
+              </td>
+              <td style={td}>
+                <input
+                  type="date"
+                  defaultValue={r.date_panne}
+                  onBlur={(e) => e.target.value && onUpdateField(r, "date_panne", e.target.value)}
+                  style={{ width: 130 }}
+                />
+              </td>
+              <td style={{ ...td }}>
+                <input
+                  type="time"
+                  className="mono"
+                  defaultValue={r.heure_debut?.slice(0, 5)}
+                  onBlur={(e) => e.target.value && onUpdateField(r, "heure_debut", e.target.value)}
+                  style={{ width: 100 }}
+                />
+              </td>
+              <td style={{ ...td }}>
+                <input
+                  type="time"
+                  className="mono"
+                  defaultValue={r.heure_fin?.slice(0, 5) || ""}
+                  onBlur={(e) => onUpdateField(r, "heure_fin", e.target.value || null)}
+                  style={{ width: 100 }}
+                />
+              </td>
+              <td style={td}>
+                <select
+                  value={r.panne_type_id || ""}
+                  onChange={(e) => onUpdateField(r, "panne_type_id", e.target.value || null)}
+                  style={{ width: "100%", fontSize: "0.82rem" }}
+                >
+                  <option value="">— Aucune —</option>
+                  {!panneTypes.some((pt) => pt.id === r.panne_type_id) && r.panne_types && (
+                    <option value={r.panne_type_id}>
+                      {r.panne_types.code ? `[${r.panne_types.code}] ` : ""}
+                      {r.panne_types.description}
+                    </option>
+                  )}
+                  {panneTypes.map((pt) => (
+                    <option key={pt.id} value={pt.id}>
+                      {pt.code ? `[${pt.code}] ` : ""}
+                      {pt.description}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td style={td}>
+                <input
+                  type="text"
+                  defaultValue={r.commentaire || ""}
+                  onBlur={(e) => onUpdateField(r, "commentaire", e.target.value || null)}
+                  placeholder="Optionnel"
+                  style={{ width: "100%" }}
+                />
+              </td>
+              <td style={td}>
+                <IconButton title="Supprimer" danger onClick={() => onDelete(r.id)}>
+                  ✕
+                </IconButton>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
 
