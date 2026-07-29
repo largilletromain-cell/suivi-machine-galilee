@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, Fragment } from "react";
 import { supabase, withRetry } from "../lib/supabaseClient";
 import { SubTabs, IconButton, Panel, statusSelectStyle } from "./ui";
 import DowntimeModal from "./DowntimeModal";
+import LinkPannesModal from "./LinkPannesModal";
 
 const emptyForm = {
   panne_erreur: "",
@@ -53,11 +54,14 @@ export default function WorkOrders({ centerId }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [modalWorkOrder, setModalWorkOrder] = useState(null);
+  const [linkPannesWorkOrder, setLinkPannesWorkOrder] = useState(null);
+  const [systems, setSystems] = useState([]);
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [sort, setSort] = useState({ field: "date_decouverte", dir: "desc" });
 
   useEffect(() => {
     loadEquipments();
+    loadSystems();
   }, [centerId]);
 
   useEffect(() => {
@@ -75,6 +79,13 @@ export default function WorkOrders({ centerId }) {
     }
   }
 
+  async function loadSystems() {
+    const res = await withRetry(() =>
+      supabase.from("systems").select("id, name, machine_id, wo_equipment_id").eq("center_id", centerId)
+    );
+    setSystems(res.data ?? []);
+  }
+
   async function loadRows(equipmentId) {
     setLoading(true);
     setError("");
@@ -82,7 +93,9 @@ export default function WorkOrders({ centerId }) {
       const res = await withRetry(() =>
         supabase
           .from("work_orders")
-          .select("*, downtime_periods(id, date_debut, heure_debut, date_fin, heure_fin, commentaire)")
+          .select(
+            "*, downtime_periods(id, date_debut, heure_debut, date_fin, heure_fin, commentaire), work_order_pannes(id, pannes(id, date_panne, heure_debut, panne_types(code, description)))"
+          )
           .eq("equipment_id", equipmentId)
           .order("created_at", { ascending: false })
       );
@@ -158,6 +171,10 @@ export default function WorkOrders({ centerId }) {
     if (sort.dir === "desc") copy.reverse();
     return copy;
   }, [rows, sort]);
+
+  const currentSystem = systems.find((s) => s.wo_equipment_id === activeEquipmentId);
+  const currentMachineId = currentSystem?.machine_id || null;
+  const currentMachineName = currentSystem?.name || "";
 
   return (
     <div>
@@ -320,6 +337,8 @@ export default function WorkOrders({ centerId }) {
                         onUpdateField={updateField}
                         onDelete={handleDelete}
                         onOpenModal={() => setModalWorkOrder(r)}
+                        onOpenLinkPannes={() => setLinkPannesWorkOrder(r)}
+                        hasMachine={!!currentMachineId}
                       />
                     </Fragment>
                   );
@@ -338,6 +357,16 @@ export default function WorkOrders({ centerId }) {
             setRows((rs) => rs.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)));
           }}
           onPeriodsChanged={() => loadRows(activeEquipmentId)}
+        />
+      )}
+
+      {linkPannesWorkOrder && currentMachineId && (
+        <LinkPannesModal
+          workOrder={linkPannesWorkOrder}
+          machineId={currentMachineId}
+          machineName={currentMachineName}
+          onClose={() => setLinkPannesWorkOrder(null)}
+          onChanged={() => loadRows(activeEquipmentId)}
         />
       )}
     </div>
@@ -365,8 +394,9 @@ function SortHeader({ label, field, sort, onSort }) {
   );
 }
 
-function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, onDelete, onOpenModal }) {
-  const hasDetails = periods.length > 0 || !!r.commentaires || !!r.resolved_via_maintenance;
+function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, onDelete, onOpenModal, onOpenLinkPannes, hasMachine }) {
+  const linkedPannes = (r.work_order_pannes ?? []).map((wp) => wp.pannes).filter(Boolean);
+  const hasDetails = periods.length > 0 || !!r.commentaires || !!r.resolved_via_maintenance || linkedPannes.length > 0;
   return (
     <>
       <tr style={{ borderTop: "1px solid var(--border)" }}>
@@ -468,6 +498,7 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
               {expanded ? "▾" : "▸"} {periods.length > 0 ? `${periods.length} immo.` : ""}
               {r.commentaires ? " 💬" : ""}
               {r.resolved_via_maintenance ? " 🔧" : ""}
+              {linkedPannes.length > 0 ? ` 🔗${linkedPannes.length}` : ""}
             </button>
             <button
               onClick={onOpenModal}
@@ -481,6 +512,23 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
               }}
             >
               +
+            </button>
+            <button
+              onClick={onOpenLinkPannes}
+              disabled={!hasMachine}
+              title={hasMachine ? "Sélectionner les pannes résolues par ce Work Order" : "Pas de Registre Pannes pour ce système"}
+              style={{
+                border: "1px solid var(--border)",
+                background: linkedPannes.length > 0 ? "var(--accent-soft)" : "var(--surface)",
+                color: hasMachine ? "var(--accent-strong)" : "var(--ink-soft)",
+                borderRadius: 6,
+                padding: "4px 8px",
+                fontSize: "0.78rem",
+                opacity: hasMachine ? 1 : 0.5,
+                cursor: hasMachine ? "pointer" : "not-allowed",
+              }}
+            >
+              🔗{linkedPannes.length > 0 ? ` ${linkedPannes.length}` : ""}
             </button>
           </div>
         </td>
@@ -511,6 +559,29 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
                 {r.maintenance_commentaire && (
                   <div style={{ marginTop: 2, fontWeight: 400 }}>{r.maintenance_commentaire}</div>
                 )}
+              </div>
+            )}
+            {linkedPannes.length > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: "0.7rem", color: "var(--ink-soft)", marginBottom: 4 }}>
+                  Pannes résolues par ce Work Order
+                </div>
+                <ul style={bulletListStyle}>
+                  {linkedPannes.map((p) => (
+                    <li key={p.id} style={subBulletStyle}>
+                      <span className="mono" style={{ color: "var(--ink-soft)" }}>
+                        {formatDate(p.date_panne)} {p.heure_debut?.slice(0, 5) || ""}
+                      </span>
+                      {" — "}
+                      {p.panne_types?.code && (
+                        <span className="code-chip" style={{ background: "var(--accent-soft)", color: "var(--accent-strong)", borderRadius: 4, padding: "1px 6px", fontSize: "0.7rem", fontWeight: 600, marginRight: 4 }}>
+                          {p.panne_types.code}
+                        </span>
+                      )}
+                      {p.panne_types?.description || "—"}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
             {periods.length > 0 && (

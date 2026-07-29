@@ -67,7 +67,7 @@ export default function RegistrePannes({ centerId }) {
       const res = await withRetry(() =>
         supabase
           .from("pannes")
-          .select("*, panne_types(code, description)")
+          .select("*, panne_types(code, description), work_order_pannes(work_orders(id, wo_number))")
           .eq("machine_id", machineId)
           .order("date_panne", { ascending: false })
           .order("heure_debut", { ascending: false })
@@ -229,6 +229,7 @@ export default function RegistrePannes({ centerId }) {
           <table>
             <thead>
               <tr style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--ink-soft)" }}>
+                <th style={th}>WO</th>
                 <th style={th}>Date</th>
                 <th style={th}>Début</th>
                 <th style={th}>Fin</th>
@@ -238,8 +239,36 @@ export default function RegistrePannes({ centerId }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {rows.map((r) => {
+                const linkedWos = (r.work_order_pannes ?? []).map((wp) => wp.work_orders).filter(Boolean);
+                return (
                 <tr key={r.id} style={{ borderTop: "1px solid var(--border)" }}>
+                  <td style={td}>
+                    {linkedWos.length > 0 ? (
+                      linkedWos.map((wo) => (
+                        <span
+                          key={wo.id}
+                          title="Panne prise en compte par ce Work Order"
+                          className="mono"
+                          style={{
+                            display: "inline-block",
+                            background: "var(--status-ok-bg)",
+                            color: "var(--status-ok-ink)",
+                            borderRadius: 4,
+                            padding: "2px 6px",
+                            fontSize: "0.72rem",
+                            fontWeight: 600,
+                            marginRight: 4,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {wo.wo_number ? `#${wo.wo_number}` : "WO lié"}
+                        </span>
+                      ))
+                    ) : (
+                      <span style={{ color: "var(--ink-soft)" }}>—</span>
+                    )}
+                  </td>
                   <td style={td}>
                     <input
                       type="date"
@@ -302,7 +331,8 @@ export default function RegistrePannes({ centerId }) {
                     </IconButton>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
