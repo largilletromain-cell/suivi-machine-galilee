@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase, withRetry } from "../lib/supabaseClient";
 import { IconButton, Panel } from "./ui";
+import { useAccess } from "../lib/access";
 
 const PRESET_MACHINE_TYPES = ["Radixact", "Varian"];
 
 export default function PanneTypesManager() {
+  const { readOnly } = useAccess();
   const [types, setTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newCode, setNewCode] = useState("");
@@ -81,6 +83,7 @@ export default function PanneTypesManager() {
         l'historique déjà saisi, ou ajoutez-en de nouvelles au fil de l'eau.
       </p>
 
+      {!readOnly && (
       <form
         onSubmit={handleAdd}
         style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "end" }}
@@ -131,6 +134,7 @@ export default function PanneTypesManager() {
           Ajouter
         </button>
       </form>
+      )}
       {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem" }}>{error}</p>}
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
@@ -177,23 +181,27 @@ export default function PanneTypesManager() {
                 </td>
                 <td style={td}>{t.description}</td>
                 <td style={td}>
-                  <button
-                    onClick={() => toggleActive(t)}
-                    style={{
-                      border: "1px solid var(--border)",
-                      background: "var(--surface)",
-                      borderRadius: 6,
-                      padding: "4px 10px",
-                      fontSize: "0.78rem",
-                    }}
-                  >
-                    {t.active ? "Désactiver" : "Réactiver"}
-                  </button>
+                  {!readOnly && (
+                    <button
+                      onClick={() => toggleActive(t)}
+                      style={{
+                        border: "1px solid var(--border)",
+                        background: "var(--surface)",
+                        borderRadius: 6,
+                        padding: "4px 10px",
+                        fontSize: "0.78rem",
+                      }}
+                    >
+                      {t.active ? "Désactiver" : "Réactiver"}
+                    </button>
+                  )}
                 </td>
                 <td style={td}>
-                  <IconButton title="Supprimer" danger onClick={() => handleDelete(t.id)}>
-                    ✕
-                  </IconButton>
+                  {!readOnly && (
+                    <IconButton title="Supprimer" danger onClick={() => handleDelete(t.id)}>
+                      ✕
+                    </IconButton>
+                  )}
                 </td>
               </tr>
             ))}

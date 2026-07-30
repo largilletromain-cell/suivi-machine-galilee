@@ -3,6 +3,7 @@ import { supabase, withRetry } from "../lib/supabaseClient";
 import { SubTabs, IconButton, Panel, statusSelectStyle } from "./ui";
 import DowntimeModal from "./DowntimeModal";
 import LinkPannesModal from "./LinkPannesModal";
+import { useAccess } from "../lib/access";
 
 const emptyForm = {
   panne_erreur: "",
@@ -46,6 +47,7 @@ function compareRows(a, b, field) {
 }
 
 export default function WorkOrders({ centerId }) {
+  const { readOnly } = useAccess();
   const [equipments, setEquipments] = useState([]);
   const [activeEquipmentId, setActiveEquipmentId] = useState(null);
   const [rows, setRows] = useState([]);
@@ -191,6 +193,7 @@ export default function WorkOrders({ centerId }) {
       )}
 
       <Panel>
+        {!readOnly && (
         <form
           onSubmit={handleAdd}
           style={{
@@ -282,6 +285,7 @@ export default function WorkOrders({ centerId }) {
             {saving ? "…" : "Ajouter"}
           </button>
         </form>
+        )}
 
         {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem" }}>{error}</p>}
 
@@ -339,6 +343,7 @@ export default function WorkOrders({ centerId }) {
                         onOpenModal={() => setModalWorkOrder(r)}
                         onOpenLinkPannes={() => setLinkPannesWorkOrder(r)}
                         hasMachine={!!currentMachineId}
+                        readOnly={readOnly}
                       />
                     </Fragment>
                   );
@@ -394,7 +399,7 @@ function SortHeader({ label, field, sort, onSort }) {
   );
 }
 
-function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, onDelete, onOpenModal, onOpenLinkPannes, hasMachine }) {
+function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, onDelete, onOpenModal, onOpenLinkPannes, hasMachine, readOnly }) {
   const linkedPannes = (r.work_order_pannes ?? []).map((wp) => wp.pannes).filter(Boolean);
   const hasDetails = periods.length > 0 || !!r.commentaires || !!r.resolved_via_maintenance || linkedPannes.length > 0;
   return (
@@ -405,6 +410,7 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
             type="date"
             className="mono"
             defaultValue={r.date_decouverte || ""}
+            disabled={readOnly}
             onBlur={(e) => onUpdateField(r, "date_decouverte", e.target.value || null)}
             style={{ width: 130 }}
           />
@@ -412,6 +418,7 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
         <td style={{ ...td, minWidth: 220 }}>
           <textarea
             defaultValue={r.panne_erreur}
+            disabled={readOnly}
             onBlur={(e) => {
               e.target.style.border = "1px solid transparent";
               if (e.target.value.trim()) onUpdateField(r, "panne_erreur", e.target.value.trim());
@@ -435,6 +442,7 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
         <td style={td}>
           <select
             value={r.statut}
+            disabled={readOnly}
             onChange={(e) => onUpdateField(r, "statut", e.target.value)}
             style={{ fontSize: "0.78rem", ...statusSelectStyle("statut", r.statut) }}
           >
@@ -446,6 +454,7 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
         <td style={td}>
           <select
             value={r.statut_wo}
+            disabled={readOnly}
             onChange={(e) => onUpdateField(r, "statut_wo", e.target.value)}
             style={{ fontSize: "0.78rem", ...statusSelectStyle("statut_wo", r.statut_wo) }}
           >
@@ -458,6 +467,7 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
             type="text"
             className="mono wo-number"
             defaultValue={r.wo_number || ""}
+            disabled={readOnly}
             onBlur={(e) => onUpdateField(r, "wo_number", e.target.value)}
             style={{ width: 90 }}
           />
@@ -466,6 +476,7 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
           <input
             type="date"
             defaultValue={r.date_intervention || ""}
+            disabled={readOnly}
             onBlur={(e) => onUpdateField(r, "date_intervention", e.target.value || null)}
             style={{ width: 130 }}
           />
@@ -473,6 +484,7 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
         <td style={td}>
           <select
             value={r.rapport_recu ? "oui" : "non"}
+            disabled={readOnly}
             onChange={(e) => onUpdateField(r, "rapport_recu", e.target.value === "oui")}
             style={{ fontSize: "0.78rem", ...statusSelectStyle("rapport_recu", r.rapport_recu ? "oui" : "non") }}
           >
@@ -500,42 +512,48 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
               {r.resolved_via_maintenance ? " 🔧" : ""}
               {linkedPannes.length > 0 ? ` 🔗${linkedPannes.length}` : ""}
             </button>
-            <button
-              onClick={onOpenModal}
-              title="Immobilisations / maintenance préventive"
-              style={{
-                border: "1px solid var(--border)",
-                background: r.resolved_via_maintenance ? "var(--status-ok-bg)" : "var(--surface)",
-                borderRadius: 6,
-                padding: "4px 8px",
-                fontSize: "0.78rem",
-              }}
-            >
-              +
-            </button>
-            <button
-              onClick={onOpenLinkPannes}
-              disabled={!hasMachine}
-              title={hasMachine ? "Sélectionner les pannes résolues par ce Work Order" : "Pas de Registre Pannes pour ce système"}
-              style={{
-                border: "1px solid var(--border)",
-                background: linkedPannes.length > 0 ? "var(--accent-soft)" : "var(--surface)",
-                color: hasMachine ? "var(--accent-strong)" : "var(--ink-soft)",
-                borderRadius: 6,
-                padding: "4px 8px",
-                fontSize: "0.78rem",
-                opacity: hasMachine ? 1 : 0.5,
-                cursor: hasMachine ? "pointer" : "not-allowed",
-              }}
-            >
-              🔗{linkedPannes.length > 0 ? ` ${linkedPannes.length}` : ""}
-            </button>
+            {!readOnly && (
+              <button
+                onClick={onOpenModal}
+                title="Immobilisations / maintenance préventive"
+                style={{
+                  border: "1px solid var(--border)",
+                  background: r.resolved_via_maintenance ? "var(--status-ok-bg)" : "var(--surface)",
+                  borderRadius: 6,
+                  padding: "4px 8px",
+                  fontSize: "0.78rem",
+                }}
+              >
+                +
+              </button>
+            )}
+            {!readOnly && (
+              <button
+                onClick={onOpenLinkPannes}
+                disabled={!hasMachine}
+                title={hasMachine ? "Sélectionner les pannes résolues par ce Work Order" : "Pas de Registre Pannes pour ce système"}
+                style={{
+                  border: "1px solid var(--border)",
+                  background: linkedPannes.length > 0 ? "var(--accent-soft)" : "var(--surface)",
+                  color: hasMachine ? "var(--accent-strong)" : "var(--ink-soft)",
+                  borderRadius: 6,
+                  padding: "4px 8px",
+                  fontSize: "0.78rem",
+                  opacity: hasMachine ? 1 : 0.5,
+                  cursor: hasMachine ? "pointer" : "not-allowed",
+                }}
+              >
+                🔗{linkedPannes.length > 0 ? ` ${linkedPannes.length}` : ""}
+              </button>
+            )}
           </div>
         </td>
         <td style={td}>
-          <IconButton title="Supprimer" danger onClick={() => onDelete(r.id)}>
-            ✕
-          </IconButton>
+          {!readOnly && (
+            <IconButton title="Supprimer" danger onClick={() => onDelete(r.id)}>
+              ✕
+            </IconButton>
+          )}
         </td>
       </tr>
       {expanded && (
@@ -603,6 +621,7 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
             </label>
             <textarea
               defaultValue={r.commentaires || ""}
+              disabled={readOnly}
               onBlur={(e) => onUpdateField(r, "commentaires", e.target.value)}
               rows={3}
               style={{ width: "100%", resize: "vertical", fontSize: "0.85rem" }}

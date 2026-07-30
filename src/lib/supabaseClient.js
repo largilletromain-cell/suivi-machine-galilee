@@ -13,8 +13,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl ?? "", supabaseAnonKey ?? "");
 
-export const CENTER_CODE = "galilee";
-
 // Petit utilitaire pour retenter un appel Supabase après un cold-start
 // (le projet gratuit Supabase peut mettre quelques secondes à se réveiller).
 export async function withRetry(fn, attempts = 3, delayMs = 1200) {
@@ -56,4 +54,17 @@ export async function setAppPassword(newPassword) {
     .from("app_settings")
     .upsert({ key: "app_password", value: newPassword });
   if (error) throw error;
+}
+
+// Authentifie un compte nominatif (identifiant + mot de passe) et renvoie sa
+// fiche (role, center_id...) si les identifiants correspondent, sinon null.
+export async function authenticateUser(username, password) {
+  const { data, error } = await supabase
+    .from("app_users")
+    .select("*")
+    .eq("username", username.trim())
+    .eq("password", password)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }

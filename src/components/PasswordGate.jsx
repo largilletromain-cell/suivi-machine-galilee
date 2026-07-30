@@ -1,10 +1,15 @@
 import { useState } from "react";
-import { getAppPassword } from "../lib/supabaseClient";
+import { getAppPassword, authenticateUser } from "../lib/supabaseClient";
 
-export default function PasswordGate({ onUnlock }) {
+export default function PasswordGate({ centers, onUnlock }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
+
+  const [username, setUsername] = useState("");
+  const [userPassword, setUserPassword] = useState("");
+  const [userError, setUserError] = useState("");
+  const [checkingUser, setCheckingUser] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -13,7 +18,7 @@ export default function PasswordGate({ onUnlock }) {
     try {
       const expected = await getAppPassword();
       if (!expected || value === expected) {
-        onUnlock("full");
+        onUnlock({ mode: "full" });
       } else {
         setError("Mot de passe incorrect.");
       }
@@ -21,6 +26,29 @@ export default function PasswordGate({ onUnlock }) {
       setError("Impossible de vérifier le mot de passe pour le moment. Réessayez.");
     } finally {
       setChecking(false);
+    }
+  }
+
+  async function handleUserSubmit(e) {
+    e.preventDefault();
+    setCheckingUser(true);
+    setUserError("");
+    try {
+      const user = await authenticateUser(username, userPassword);
+      if (!user) {
+        setUserError("Identifiant ou mot de passe incorrect.");
+        return;
+      }
+      onUnlock({
+        mode: "user",
+        role: user.role,
+        centerId: user.center_id || null,
+        username: user.username,
+      });
+    } catch (err) {
+      setUserError("Impossible de vérifier ces identifiants pour le moment. Réessayez.");
+    } finally {
+      setCheckingUser(false);
     }
   }
 
@@ -32,6 +60,7 @@ export default function PasswordGate({ onUnlock }) {
         alignItems: "center",
         justifyContent: "center",
         background: "var(--rail)",
+        padding: 16,
       }}
     >
       <div
@@ -39,7 +68,8 @@ export default function PasswordGate({ onUnlock }) {
           background: "var(--surface)",
           borderRadius: 10,
           padding: "32px 28px",
-          width: 320,
+          width: 340,
+          maxWidth: "100%",
           boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
         }}
       >
@@ -55,81 +85,135 @@ export default function PasswordGate({ onUnlock }) {
         >
           Suivi machines
         </div>
-        <h2 style={{ margin: "0 0 18px", fontSize: "1.1rem" }}>Centre Galilée</h2>
+        <h2 style={{ margin: "0 0 18px", fontSize: "1.1rem" }}>Groupe PSV</h2>
 
-        <form onSubmit={handleSubmit}>
-          <label
-            htmlFor="pw"
-            style={{ display: "block", fontSize: "0.85rem", marginBottom: 6 }}
-          >
-            Mot de passe d'accès
-          </label>
-          <input
-            id="pw"
-            type="password"
-            autoFocus
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            style={{ width: "100%", marginBottom: 10 }}
-          />
-          {error && (
-            <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem", margin: "0 0 10px" }}>
-              {error}
+        {centers?.length > 0 && (
+          <>
+            <div style={{ fontSize: "0.78rem", color: "var(--ink-soft)", marginBottom: 8, fontWeight: 600 }}>
+              Accès rapide Manipulateur
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+              {centers.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => onUnlock({ mode: "manipulateur", centerId: c.id })}
+                  style={{
+                    width: "100%",
+                    background: "var(--accent-soft)",
+                    color: "var(--accent-strong)",
+                    border: "1px solid var(--accent)",
+                    borderRadius: 6,
+                    padding: "9px 0",
+                    fontWeight: 600,
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  Manipulateur — {c.name}
+                </button>
+              ))}
+            </div>
+            <p style={{ fontSize: "0.7rem", color: "var(--ink-soft)", margin: "0 0 16px", textAlign: "center" }}>
+              Accès direct au Registre Pannes de ce centre, sans mot de passe
             </p>
+            <Divider />
+          </>
+        )}
+
+        <div style={{ fontSize: "0.78rem", color: "var(--ink-soft)", margin: "16px 0 8px", fontWeight: 600 }}>
+          Compte personnel
+        </div>
+        <form onSubmit={handleUserSubmit}>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Identifiant"
+            autoComplete="username"
+            style={{ width: "100%", marginBottom: 8 }}
+          />
+          <input
+            type="password"
+            value={userPassword}
+            onChange={(e) => setUserPassword(e.target.value)}
+            placeholder="Mot de passe"
+            autoComplete="current-password"
+            style={{ width: "100%", marginBottom: 8 }}
+          />
+          {userError && (
+            <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem", margin: "0 0 8px" }}>{userError}</p>
           )}
           <button
             type="submit"
-            disabled={checking}
+            disabled={checkingUser}
             style={{
               width: "100%",
               background: "var(--accent)",
               color: "#fff",
               border: "none",
               borderRadius: 6,
-              padding: "10px 0",
+              padding: "9px 0",
               fontWeight: 600,
-              fontSize: "0.9rem",
+              fontSize: "0.85rem",
+            }}
+          >
+            {checkingUser ? "…" : "Se connecter"}
+          </button>
+        </form>
+
+        <Divider />
+
+        <div style={{ fontSize: "0.78rem", color: "var(--ink-soft)", margin: "16px 0 8px", fontWeight: 600 }}>
+          Accès complet (mot de passe partagé)
+        </div>
+        <form onSubmit={handleSubmit}>
+          <input
+            type="password"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="Mot de passe"
+            style={{ width: "100%", marginBottom: 8 }}
+          />
+          {error && (
+            <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem", margin: "0 0 8px" }}>{error}</p>
+          )}
+          <button
+            type="submit"
+            disabled={checking}
+            style={{
+              width: "100%",
+              background: "var(--surface)",
+              color: "var(--ink)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              padding: "9px 0",
+              fontWeight: 600,
+              fontSize: "0.85rem",
             }}
           >
             {checking ? "…" : "Entrer"}
           </button>
         </form>
-
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            margin: "18px 0",
-            color: "var(--ink-soft)",
-            fontSize: "0.72rem",
-          }}
-        >
-          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-          ou
-          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-        </div>
-
-        <button
-          type="button"
-          onClick={() => onUnlock("manipulateur")}
-          style={{
-            width: "100%",
-            background: "var(--accent-soft)",
-            color: "var(--accent-strong)",
-            border: "1px solid var(--accent)",
-            borderRadius: 6,
-            padding: "10px 0",
-            fontWeight: 600,
-            fontSize: "0.9rem",
-          }}
-        >
-          Manipulateur
-        </button>
-        <p style={{ fontSize: "0.72rem", color: "var(--ink-soft)", margin: "6px 0 0", textAlign: "center" }}>
-          Accès direct au Registre Pannes, sans mot de passe
-        </p>
       </div>
+    </div>
+  );
+}
+
+function Divider() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        margin: "14px 0",
+        color: "var(--ink-soft)",
+        fontSize: "0.72rem",
+      }}
+    >
+      <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+      ou
+      <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
     </div>
   );
 }

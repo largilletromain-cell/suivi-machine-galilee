@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, Fragment } from "react";
 import { supabase, withRetry } from "../lib/supabaseClient";
 import { SubTabs, IconButton, Panel } from "./ui";
+import { useAccess } from "../lib/access";
 
 const MONTHS_FR = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
@@ -43,6 +44,7 @@ const emptyForm = {
 };
 
 export default function RegistreInterventions({ centerId }) {
+  const { readOnly } = useAccess();
   const [equipments, setEquipments] = useState([]);
   const [activeEquipmentId, setActiveEquipmentId] = useState(null);
   const [workOrders, setWorkOrders] = useState([]);
@@ -232,6 +234,7 @@ export default function RegistreInterventions({ centerId }) {
           ))}
         </div>
 
+        {!readOnly && (
         <form
           onSubmit={handleAdd}
           style={{
@@ -309,6 +312,7 @@ export default function RegistreInterventions({ centerId }) {
             {saving ? "…" : "Ajouter"}
           </button>
         </form>
+        )}
 
         {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem" }}>{error}</p>}
 
@@ -353,7 +357,7 @@ export default function RegistreInterventions({ centerId }) {
                           onCancel={cancelEdit}
                         />
                       ) : (
-                        <EventRow row={row} onEdit={startEdit} onDelete={handleDelete} />
+                        <EventRow row={row} onEdit={startEdit} onDelete={handleDelete} readOnly={readOnly} />
                       )}
                     </Fragment>
                   );
@@ -367,7 +371,7 @@ export default function RegistreInterventions({ centerId }) {
   );
 }
 
-function EventRow({ row, onEdit, onDelete }) {
+function EventRow({ row, onEdit, onDelete, readOnly }) {
   const style = EVENT_STYLES[row.eventType] ?? EVENT_STYLES.corrective;
   return (
     <tr style={{ borderTop: "1px solid var(--border)" }}>
@@ -411,7 +415,7 @@ function EventRow({ row, onEdit, onDelete }) {
         )}
       </td>
       <td style={td}>
-        {row.kind === "intervention" ? (
+        {row.kind === "intervention" && !readOnly ? (
           <div style={{ display: "flex", gap: 6 }}>
             <button
               onClick={() => onEdit(row.raw)}
@@ -431,11 +435,11 @@ function EventRow({ row, onEdit, onDelete }) {
               ✕
             </IconButton>
           </div>
-        ) : (
+        ) : row.kind === "wo" ? (
           <span title="Modifiable uniquement dans l'onglet Work Order" style={{ color: "var(--ink-soft)", fontSize: "0.9rem" }}>
             🔒
           </span>
-        )}
+        ) : null}
       </td>
     </tr>
   );
