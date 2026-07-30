@@ -12,8 +12,6 @@ const emptyForm = (centerId) => ({
   center_id: centerId || "",
 });
 
-const emptyCenterForm = { code: "", name: "" };
-
 export default function Parametrage({ centerId, centers, onCentersChanged }) {
   const { readOnly, username } = useAccess();
   const [filterCenterId, setFilterCenterId] = useState(centerId || "");
@@ -23,10 +21,6 @@ export default function Parametrage({ centerId, centers, onCentersChanged }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [editingSystem, setEditingSystem] = useState(null);
-
-  const [centerForm, setCenterForm] = useState(emptyCenterForm);
-  const [centerError, setCenterError] = useState("");
-  const [savingCenter, setSavingCenter] = useState(false);
 
   useEffect(() => {
     if (!filterCenterId && centerId) setFilterCenterId(centerId);
@@ -46,33 +40,6 @@ export default function Parametrage({ centerId, centers, onCentersChanged }) {
       setSystems(res.data ?? []);
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleCreateCenter(e) {
-    e.preventDefault();
-    if (!centerForm.code.trim() || !centerForm.name.trim()) {
-      setCenterError("Le code et le nom du centre sont obligatoires.");
-      return;
-    }
-    setSavingCenter(true);
-    setCenterError("");
-    try {
-      const { data, error: cError } = await supabase
-        .from("centers")
-        .insert({ code: centerForm.code.trim().toLowerCase(), name: centerForm.name.trim() })
-        .select()
-        .single();
-      if (cError) throw cError;
-      setCenterForm(emptyCenterForm);
-      logActivity(username, `a créé le centre « ${centerForm.name.trim()} »`);
-      const updated = [...centers, data].sort((a, b) => a.name.localeCompare(b.name));
-      onCentersChanged(updated);
-      setFilterCenterId(data.id);
-    } catch (e) {
-      setCenterError("Impossible de créer ce centre (code peut-être déjà utilisé).");
-    } finally {
-      setSavingCenter(false);
     }
   }
 
@@ -162,71 +129,6 @@ export default function Parametrage({ centerId, centers, onCentersChanged }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <Panel>
-        <h3 style={{ margin: "0 0 8px", fontSize: "0.95rem" }}>Centres</h3>
-        <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem", marginTop: 0 }}>
-          Ce logiciel peut suivre plusieurs centres. Créez-en un nouveau ici si besoin.
-        </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
-          {centers.map((c) => (
-            <span
-              key={c.id}
-              style={{
-                background: "var(--accent-soft)",
-                color: "var(--accent-strong)",
-                borderRadius: 999,
-                padding: "4px 12px",
-                fontSize: "0.8rem",
-                fontWeight: 600,
-              }}
-            >
-              {c.name}
-            </span>
-          ))}
-        </div>
-        {!readOnly && (
-        <form onSubmit={handleCreateCenter} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
-          <Field label="Code (court, sans espace)">
-            <input
-              type="text"
-              className="mono"
-              value={centerForm.code}
-              onChange={(e) => setCenterForm({ ...centerForm, code: e.target.value })}
-              placeholder="ex : bourgogne"
-              style={{ width: 160 }}
-            />
-          </Field>
-          <Field label="Nom affiché">
-            <input
-              type="text"
-              value={centerForm.name}
-              onChange={(e) => setCenterForm({ ...centerForm, name: e.target.value })}
-              placeholder="ex : Centre Bourgogne"
-              style={{ width: 220 }}
-            />
-          </Field>
-          <button
-            type="submit"
-            disabled={savingCenter}
-            style={{
-              background: "var(--accent)",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              padding: "8px 16px",
-              fontWeight: 600,
-              height: 34,
-            }}
-          >
-            {savingCenter ? "…" : "Créer le centre"}
-          </button>
-        </form>
-        )}
-        {centerError && (
-          <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem", marginBottom: 0 }}>{centerError}</p>
-        )}
-      </Panel>
-
       <Panel>
         <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem", marginTop: 0 }}>
           Créez ici chaque machine ou logiciel à suivre, en indiquant son centre. Un sous-onglet{" "}

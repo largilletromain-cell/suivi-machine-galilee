@@ -20,7 +20,7 @@ const ALL_TABS = [
   { key: "stats", label: "Statistiques" },
   { key: "types", label: "Liste des pannes" },
   { key: "parametrage", label: "Paramétrage" },
-  { key: "utilisateurs", label: "Utilisateurs" },
+  { key: "utilisateurs", label: "Utilisateurs et centres" },
   { key: "logs", label: "Logs" },
 ];
 
@@ -320,7 +320,9 @@ export default function App() {
               {activeTab === "parametrage" && (
                 <Parametrage centerId={centerId} centers={centers} onCentersChanged={setCenters} />
               )}
-              {activeTab === "utilisateurs" && <Utilisateurs centers={centers} />}
+              {activeTab === "utilisateurs" && (
+                <Utilisateurs centers={centers} onCentersChanged={setCenters} />
+              )}
               {activeTab === "logs" && <Logs />}
             </>
           )}

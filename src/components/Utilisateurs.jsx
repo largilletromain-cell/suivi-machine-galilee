@@ -11,7 +11,9 @@ const emptyForm = (centerId) => ({
   center_id: centerId || "",
 });
 
-export default function Utilisateurs({ centers }) {
+const emptyCenterForm = { code: "", name: "" };
+
+export default function Utilisateurs({ centers, onCentersChanged }) {
   const { username: currentUsername } = useAccess();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,6 +21,10 @@ export default function Utilisateurs({ centers }) {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(() => emptyForm(centers[0]?.id));
   const [saving, setSaving] = useState(false);
+
+  const [centerForm, setCenterForm] = useState(emptyCenterForm);
+  const [centerError, setCenterError] = useState("");
+  const [savingCenter, setSavingCenter] = useState(false);
 
   useEffect(() => {
     load();
@@ -36,6 +42,32 @@ export default function Utilisateurs({ centers }) {
       setError("Erreur de chargement des comptes utilisateurs.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleCreateCenter(e) {
+    e.preventDefault();
+    if (!centerForm.code.trim() || !centerForm.name.trim()) {
+      setCenterError("Le code et le nom du centre sont obligatoires.");
+      return;
+    }
+    setSavingCenter(true);
+    setCenterError("");
+    try {
+      const { data, error: cError } = await supabase
+        .from("centers")
+        .insert({ code: centerForm.code.trim().toLowerCase(), name: centerForm.name.trim() })
+        .select()
+        .single();
+      if (cError) throw cError;
+      setCenterForm(emptyCenterForm);
+      logActivity(currentUsername, `a créé le centre « ${centerForm.name.trim()} »`);
+      const updated = [...centers, data].sort((a, b) => a.name.localeCompare(b.name));
+      onCentersChanged(updated);
+    } catch (e) {
+      setCenterError("Impossible de créer ce centre (code peut-être déjà utilisé).");
+    } finally {
+      setSavingCenter(false);
     }
   }
 
@@ -82,7 +114,73 @@ export default function Utilisateurs({ centers }) {
   }
 
   return (
-    <Panel>
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <Panel>
+        <h3 style={{ margin: "0 0 8px", fontSize: "0.95rem" }}>Centres</h3>
+        <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem", marginTop: 0 }}>
+          Ce logiciel peut suivre plusieurs centres. Créez-en un nouveau ici si besoin.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+          {centers.map((c) => (
+            <span
+              key={c.id}
+              style={{
+                background: "var(--accent-soft)",
+                color: "var(--accent-strong)",
+                borderRadius: 999,
+                padding: "4px 12px",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+              }}
+            >
+              {c.name}
+            </span>
+          ))}
+        </div>
+        <form onSubmit={handleCreateCenter} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
+          <Field label="Code (court, sans espace)">
+            <input
+              type="text"
+              className="mono"
+              value={centerForm.code}
+              onChange={(e) => setCenterForm({ ...centerForm, code: e.target.value })}
+              placeholder="ex : bourgogne"
+              style={{ width: 160 }}
+            />
+          </Field>
+          <Field label="Nom affiché">
+            <input
+              type="text"
+              value={centerForm.name}
+              onChange={(e) => setCenterForm({ ...centerForm, name: e.target.value })}
+              placeholder="ex : Centre Bourgogne"
+              style={{ width: 220 }}
+            />
+          </Field>
+          <button
+            type="submit"
+            disabled={savingCenter}
+            style={{
+              background: "var(--accent)",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              padding: "8px 16px",
+              fontWeight: 600,
+              height: 34,
+            }}
+          >
+            {savingCenter ? "…" : "Créer le centre"}
+          </button>
+        </form>
+        {centerError && (
+          <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem", marginBottom: 0, marginTop: 8 }}>
+            {centerError}
+          </p>
+        )}
+      </Panel>
+
+      <Panel>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem", marginTop: 0, flex: 1 }}>
           <strong>Admin</strong> a accès à tout, y compris cet onglet.{" "}
@@ -262,7 +360,8 @@ export default function Utilisateurs({ centers }) {
           </tbody>
         </table>
       )}
-    </Panel>
+      </Panel>
+    </div>
   );
 }
 
