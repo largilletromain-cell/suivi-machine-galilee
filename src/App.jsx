@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase, withRetry } from "./lib/supabaseClient";
 import { AccessContext } from "./lib/access";
 import PasswordGate from "./components/PasswordGate";
+import ChangeMyPasswordModal from "./components/ChangeMyPasswordModal";
 import RegistrePannes from "./components/RegistrePannes";
 import WorkOrders from "./components/WorkOrders";
 import PanneTypesManager from "./components/PanneTypesManager";
@@ -46,6 +47,9 @@ export default function App() {
   const [centerId, setCenterId] = useState(null); // centre actuellement affiché
   const [activeTab, setActiveTab] = useState("pannes");
   const [loadError, setLoadError] = useState(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const menuRef = useRef(null);
 
   // Les centres sont publics à lister (aucune donnée sensible), on les
   // charge avant même la connexion pour afficher les boutons Manipulateur
@@ -68,6 +72,18 @@ export default function App() {
     };
   }, []);
 
+  // Ferme le menu utilisateur si on clique en dehors.
+  useEffect(() => {
+    if (!showUserMenu) return;
+    function handleClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setShowUserMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showUserMenu]);
+
   function handleUnlock({ mode, role, centerId: fixedCenterId, username }) {
     let finalRole = role;
     if (mode === "manipulateur") finalRole = "manipulateur";
@@ -82,6 +98,13 @@ export default function App() {
     });
     setCenterId(resolvedCenterId);
     setActiveTab("pannes");
+  }
+
+  function handleLogout() {
+    setSession(null);
+    setCenterId(null);
+    setActiveTab("pannes");
+    setShowUserMenu(false);
   }
 
   const visibleTabs = useMemo(() => {
@@ -178,6 +201,56 @@ export default function App() {
                 </h1>
               )}
             </div>
+
+            <div ref={menuRef} style={{ position: "relative" }}>
+              <button
+                onClick={() => setShowUserMenu((s) => !s)}
+                style={{
+                  border: "1px solid #33424a",
+                  background: showUserMenu ? "#1a242b" : "transparent",
+                  color: "var(--rail-ink)",
+                  borderRadius: 999,
+                  padding: "6px 14px",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                👤 {session.username || "Compte"} <span style={{ fontSize: "0.65rem" }}>▾</span>
+              </button>
+              {showUserMenu && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 6px)",
+                    right: 0,
+                    background: "var(--surface)",
+                    borderRadius: 8,
+                    boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+                    minWidth: 200,
+                    overflow: "hidden",
+                    zIndex: 40,
+                  }}
+                >
+                  {session.username && (
+                    <button
+                      onClick={() => {
+                        setShowChangePassword(true);
+                        setShowUserMenu(false);
+                      }}
+                      style={menuItemStyle}
+                    >
+                      🔒 Changer mon mot de passe
+                    </button>
+                  )}
+                  <button onClick={handleLogout} style={{ ...menuItemStyle, color: "var(--status-bad-ink)" }}>
+                    🚪 Se déconnecter
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           <nav style={{ display: "flex", gap: 4 }}>
             {visibleTabs.map((t) => {
@@ -242,6 +315,23 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {showChangePassword && session.username && (
+        <ChangeMyPasswordModal username={session.username} onClose={() => setShowChangePassword(false)} />
+      )}
     </AccessContext.Provider>
   );
 }
+
+const menuItemStyle = {
+  display: "block",
+  width: "100%",
+  textAlign: "left",
+  border: "none",
+  background: "transparent",
+  padding: "10px 14px",
+  fontSize: "0.82rem",
+  fontWeight: 600,
+  color: "var(--ink)",
+  cursor: "pointer",
+};
