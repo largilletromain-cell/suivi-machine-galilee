@@ -45,10 +45,6 @@ export default function Utilisateurs({ centers }) {
       setError("Le nom, l'identifiant et le mot de passe sont obligatoires.");
       return;
     }
-    if (form.role !== "admin" && !form.center_id) {
-      setError("Un centre est obligatoire pour les rôles Physicien et Visualisation.");
-      return;
-    }
     setSaving(true);
     setError("");
     try {
@@ -89,10 +85,11 @@ export default function Utilisateurs({ centers }) {
     <Panel>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem", marginTop: 0, flex: 1 }}>
-          <strong>Admin</strong> a accès à tout, y compris cet onglet, et peut voir n'importe quel centre.{" "}
-          <strong>Physicien</strong> a accès à tout sauf cet onglet, limité au centre choisi.{" "}
-          <strong>Visualisation</strong> voit les mêmes informations que Physicien, dans son centre, mais
-          sans pouvoir rien modifier.
+          <strong>Admin</strong> a accès à tout, y compris cet onglet.{" "}
+          <strong>Physicien</strong> a accès à tout sauf cet onglet.{" "}
+          <strong>Visualisation</strong> voit les mêmes informations que Physicien mais sans pouvoir rien
+          modifier. Pour n'importe quel rôle, choisissez « Tous les centres » si la personne doit pouvoir
+          basculer entre les centres, ou un centre précis si elle doit y rester cantonnée.
         </p>
         <button
           onClick={() => setShowAdd((s) => !s)}
@@ -171,7 +168,7 @@ export default function Utilisateurs({ centers }) {
               onChange={(e) => setForm({ ...form, center_id: e.target.value })}
               style={{ width: "100%" }}
             >
-              {form.role === "admin" && <option value="">Tous les centres</option>}
+              <option value="">Tous les centres</option>
               {centers.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -247,7 +244,7 @@ export default function Utilisateurs({ centers }) {
                     onChange={(e) => updateField(u, "center_id", e.target.value || null)}
                     style={{ fontSize: "0.82rem" }}
                   >
-                    {u.role === "admin" && <option value="">Tous les centres</option>}
+                    <option value="">Tous les centres</option>
                     {centers.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
