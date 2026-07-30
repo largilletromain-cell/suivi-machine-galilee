@@ -3,6 +3,7 @@ import { supabase, withRetry } from "./lib/supabaseClient";
 import { AccessContext } from "./lib/access";
 import PasswordGate from "./components/PasswordGate";
 import ChangeMyPasswordModal from "./components/ChangeMyPasswordModal";
+import GuideModal from "./components/GuideModal";
 import RegistrePannes from "./components/RegistrePannes";
 import WorkOrders from "./components/WorkOrders";
 import PanneTypesManager from "./components/PanneTypesManager";
@@ -49,6 +50,7 @@ export default function App() {
   const [loadError, setLoadError] = useState(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const menuRef = useRef(null);
 
   // Les centres sont publics à lister (aucune donnée sensible), on les
@@ -245,6 +247,15 @@ export default function App() {
                       🔒 Changer mon mot de passe
                     </button>
                   )}
+                  <button
+                    onClick={() => {
+                      setShowGuide(true);
+                      setShowUserMenu(false);
+                    }}
+                    style={menuItemStyle}
+                  >
+                    📖 Mode d'emploi
+                  </button>
                   <button onClick={handleLogout} style={{ ...menuItemStyle, color: "var(--status-bad-ink)" }}>
                     🚪 Se déconnecter
                   </button>
@@ -319,6 +330,7 @@ export default function App() {
       {showChangePassword && session.username && (
         <ChangeMyPasswordModal username={session.username} onClose={() => setShowChangePassword(false)} />
       )}
+      {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
     </AccessContext.Provider>
   );
 }
