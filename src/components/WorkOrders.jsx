@@ -96,7 +96,7 @@ export default function WorkOrders({ centerId }) {
         supabase
           .from("work_orders")
           .select(
-            "*, downtime_periods(id, date_debut, heure_debut, date_fin, heure_fin, commentaire), work_order_pannes(id, pannes(id, date_panne, heure_debut, panne_types(code, description))), resolved_via_wo:work_orders!resolved_via_wo_id(id, panne_erreur, wo_number)"
+            "*, downtime_periods(id, date_debut, heure_debut, date_fin, heure_fin, commentaire), work_order_pannes(id, pannes(id, date_panne, heure_debut, panne_types(code, description))), resolved_via_wo:work_orders!work_orders_resolved_via_wo_id_fkey(id, panne_erreur, wo_number)"
           )
           .eq("equipment_id", equipmentId)
           .order("created_at", { ascending: false })
@@ -405,6 +405,7 @@ function SortHeader({ label, field, sort, onSort }) {
 
 function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, onDelete, onOpenModal, onOpenLinkPannes, hasMachine, readOnly }) {
   const linkedPannes = (r.work_order_pannes ?? []).map((wp) => wp.pannes).filter(Boolean);
+  const resolvedWo = Array.isArray(r.resolved_via_wo) ? r.resolved_via_wo[0] : r.resolved_via_wo;
   const hasDetails = periods.length > 0 || !!r.commentaires || !!r.resolved_via_maintenance || !!r.resolved_via_other_wo || linkedPannes.length > 0;
   return (
     <>
@@ -584,7 +585,7 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
                 )}
               </div>
             )}
-            {r.resolved_via_other_wo && r.resolved_via_wo && (
+            {r.resolved_via_other_wo && resolvedWo && (
               <div
                 style={{
                   background: "var(--accent-soft)",
@@ -597,8 +598,8 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
               >
                 <div style={{ fontWeight: 600 }}>
                   🔁 Résolu avec le Work Order{" "}
-                  {r.resolved_via_wo.wo_number ? `#${r.resolved_via_wo.wo_number} — ` : ""}
-                  {r.resolved_via_wo.panne_erreur}
+                  {resolvedWo.wo_number ? `#${resolvedWo.wo_number} — ` : ""}
+                  {resolvedWo.panne_erreur}
                 </div>
               </div>
             )}

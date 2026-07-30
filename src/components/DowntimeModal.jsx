@@ -154,7 +154,7 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
           statut: resolvedViaOtherWo && resolvedWoId ? "resolu" : workOrder.statut,
         })
         .eq("id", workOrder.id)
-        .select("*, resolved_via_wo:work_orders!resolved_via_wo_id(id, panne_erreur, wo_number)")
+        .select("*, resolved_via_wo:work_orders!work_orders_resolved_via_wo_id_fkey(id, panne_erreur, wo_number)")
         .single()
     );
     if (res.data) {
