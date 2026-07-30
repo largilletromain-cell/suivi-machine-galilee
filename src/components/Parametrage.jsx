@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { supabase, withRetry } from "../lib/supabaseClient";
+import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
 import { IconButton, Panel } from "./ui";
 import EditSystemModal from "./EditSystemModal";
+import { useAccess } from "../lib/access";
 
 const emptyForm = (centerId) => ({
   name: "",
@@ -14,6 +15,7 @@ const emptyForm = (centerId) => ({
 const emptyCenterForm = { code: "", name: "" };
 
 export default function Parametrage({ centerId, centers, onCentersChanged }) {
+  const { readOnly, username } = useAccess();
   const [filterCenterId, setFilterCenterId] = useState(centerId || "");
   const [systems, setSystems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +65,7 @@ export default function Parametrage({ centerId, centers, onCentersChanged }) {
         .single();
       if (cError) throw cError;
       setCenterForm(emptyCenterForm);
+      logActivity(username, `a créé le centre « ${centerForm.name.trim()} »`);
       const updated = [...centers, data].sort((a, b) => a.name.localeCompare(b.name));
       onCentersChanged(updated);
       setFilterCenterId(data.id);
@@ -128,6 +131,7 @@ export default function Parametrage({ centerId, centers, onCentersChanged }) {
       });
       if (sError) throw sError;
 
+      logActivity(username, `a créé le système « ${name} » (${form.system_type})`);
       setForm(emptyForm(form.center_id));
       await load(filterCenterId);
     } catch (e) {
@@ -152,6 +156,7 @@ export default function Parametrage({ centerId, centers, onCentersChanged }) {
       await withRetry(() => supabase.from("wo_equipments").delete().eq("id", system.wo_equipment_id));
     }
     await withRetry(() => supabase.from("systems").delete().eq("id", system.id));
+    logActivity(username, `a supprimé le système « ${system.name} »`);
     setSystems((s) => s.filter((x) => x.id !== system.id));
   }
 
@@ -179,6 +184,7 @@ export default function Parametrage({ centerId, centers, onCentersChanged }) {
             </span>
           ))}
         </div>
+        {!readOnly && (
         <form onSubmit={handleCreateCenter} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
           <Field label="Code (court, sans espace)">
             <input
@@ -215,6 +221,7 @@ export default function Parametrage({ centerId, centers, onCentersChanged }) {
             {savingCenter ? "…" : "Créer le centre"}
           </button>
         </form>
+        )}
         {centerError && (
           <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem", marginBottom: 0 }}>{centerError}</p>
         )}
@@ -243,6 +250,7 @@ export default function Parametrage({ centerId, centers, onCentersChanged }) {
           </select>
         </Field>
 
+        {!readOnly && (
         <form
           onSubmit={handleCreate}
           style={{
@@ -321,6 +329,7 @@ export default function Parametrage({ centerId, centers, onCentersChanged }) {
             {saving ? "…" : "Créer"}
           </button>
         </form>
+        )}
         {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem" }}>{error}</p>}
 
         {loading ? (
@@ -355,25 +364,29 @@ export default function Parametrage({ centerId, centers, onCentersChanged }) {
                   <td style={td}>{formatDate(s.commissioning_date)}</td>
                   <td style={td}>{s.machine_id ? "Oui" : "—"}</td>
                   <td style={td}>
-                    <button
-                      onClick={() => setEditingSystem(s)}
-                      style={{
-                        border: "1px solid var(--border)",
-                        background: "var(--surface)",
-                        borderRadius: 6,
-                        padding: "4px 10px",
-                        fontSize: "0.78rem",
-                        fontWeight: 600,
-                        color: "var(--accent-strong)",
-                      }}
-                    >
-                      ✎ Modifier
-                    </button>
+                    {!readOnly && (
+                      <button
+                        onClick={() => setEditingSystem(s)}
+                        style={{
+                          border: "1px solid var(--border)",
+                          background: "var(--surface)",
+                          borderRadius: 6,
+                          padding: "4px 10px",
+                          fontSize: "0.78rem",
+                          fontWeight: 600,
+                          color: "var(--accent-strong)",
+                        }}
+                      >
+                        ✎ Modifier
+                      </button>
+                    )}
                   </td>
                   <td style={td}>
-                    <IconButton title="Supprimer" danger onClick={() => handleDelete(s)}>
-                      ✕
-                    </IconButton>
+                    {!readOnly && (
+                      <IconButton title="Supprimer" danger onClick={() => handleDelete(s)}>
+                        ✕
+                      </IconButton>
+                    )}
                   </td>
                 </tr>
               ))}

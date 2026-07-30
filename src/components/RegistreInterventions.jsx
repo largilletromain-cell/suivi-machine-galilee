@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, Fragment } from "react";
-import { supabase, withRetry } from "../lib/supabaseClient";
+import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
 import { SubTabs, IconButton, Panel } from "./ui";
 import { useAccess } from "../lib/access";
 
@@ -44,7 +44,7 @@ const emptyForm = {
 };
 
 export default function RegistreInterventions({ centerId }) {
-  const { readOnly } = useAccess();
+  const { readOnly, username } = useAccess();
   const [equipments, setEquipments] = useState([]);
   const [activeEquipmentId, setActiveEquipmentId] = useState(null);
   const [workOrders, setWorkOrders] = useState([]);
@@ -120,6 +120,8 @@ export default function RegistreInterventions({ centerId }) {
           commentaire: form.commentaire || null,
         })
       );
+      const equipmentName = equipments.find((e) => e.id === activeEquipmentId)?.label || "";
+      logActivity(username, `a ajouté un événement « ${form.event_type} » (${equipmentName})`);
       setForm(emptyForm);
       await loadData(activeEquipmentId);
     } catch (e) {
@@ -159,6 +161,7 @@ export default function RegistreInterventions({ centerId }) {
         })
         .eq("id", id)
     );
+    logActivity(username, `a modifié un événement du Registre des Interventions`);
     cancelEdit();
     await loadData(activeEquipmentId);
   }
@@ -166,6 +169,7 @@ export default function RegistreInterventions({ centerId }) {
   async function handleDelete(id) {
     if (!window.confirm("Supprimer cet événement ?")) return;
     await withRetry(() => supabase.from("interventions").delete().eq("id", id));
+    logActivity(username, `a supprimé un événement du Registre des Interventions`);
     setInterventions((s) => s.filter((x) => x.id !== id));
   }
 

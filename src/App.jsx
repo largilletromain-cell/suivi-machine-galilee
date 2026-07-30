@@ -9,6 +9,7 @@ import Parametrage from "./components/Parametrage";
 import RegistreInterventions from "./components/RegistreInterventions";
 import Statistiques from "./components/Statistiques";
 import Utilisateurs from "./components/Utilisateurs";
+import Logs from "./components/Logs";
 
 const ALL_TABS = [
   { key: "pannes", label: "Registre Pannes" },
@@ -18,6 +19,7 @@ const ALL_TABS = [
   { key: "types", label: "Liste des pannes" },
   { key: "parametrage", label: "Paramétrage" },
   { key: "utilisateurs", label: "Utilisateurs" },
+  { key: "logs", label: "Logs" },
 ];
 
 // Onglets visibles par rôle. "manipulateur" est l'accès rapide sans mot de
@@ -27,7 +29,7 @@ const TABS_BY_ROLE = {
   manipulateur: ["pannes", "types"],
   visualisation: ["pannes", "wo", "interventions", "stats", "types", "parametrage"],
   physicien: ["pannes", "wo", "interventions", "stats", "types", "parametrage"],
-  admin: ["pannes", "wo", "interventions", "stats", "types", "parametrage", "utilisateurs"],
+  admin: ["pannes", "wo", "interventions", "stats", "types", "parametrage", "utilisateurs", "logs"],
 };
 
 // Lien direct type https://votre-site.vercel.app/?vue=registre : accès
@@ -235,6 +237,7 @@ export default function App() {
                 <Parametrage centerId={centerId} centers={centers} onCentersChanged={setCenters} />
               )}
               {activeTab === "utilisateurs" && <Utilisateurs centers={centers} />}
+              {activeTab === "logs" && <Logs />}
             </>
           )}
         </main>

@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { supabase, withRetry } from "../lib/supabaseClient";
+import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
 import { IconButton } from "./ui";
+import { useAccess } from "../lib/access";
 
 const emptyPeriod = { date_debut: "", heure_debut: "", date_fin: "", heure_fin: "", commentaire: "" };
 
 export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, onPeriodsChanged }) {
+  const { username } = useAccess();
   const [periods, setPeriods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(emptyPeriod);
@@ -54,6 +56,7 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
       })
     );
     setForm(emptyPeriod);
+    logActivity(username, `a ajouté une immobilisation (${workOrder.panne_erreur})`);
     load();
     onPeriodsChanged?.();
   }
@@ -61,6 +64,7 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
   async function handleDeletePeriod(id) {
     if (!window.confirm("Supprimer cette période d'immobilisation ?")) return;
     await withRetry(() => supabase.from("downtime_periods").delete().eq("id", id));
+    logActivity(username, `a supprimé une immobilisation (${workOrder.panne_erreur})`);
     setPeriods((p) => p.filter((x) => x.id !== id));
     onPeriodsChanged?.();
   }
@@ -98,6 +102,7 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
     );
     if (res.data) {
       setPeriods((ps) => ps.map((p) => (p.id === id ? res.data : p)));
+      logActivity(username, `a modifié une immobilisation (${workOrder.panne_erreur})`);
       onPeriodsChanged?.();
     }
     cancelEdit();
@@ -109,6 +114,7 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
     );
     if (res.data) {
       setPeriods((ps) => ps.map((x) => (x.id === p.id ? res.data : x)));
+      logActivity(username, `a supprimé le commentaire d'une immobilisation (${workOrder.panne_erreur})`);
       onPeriodsChanged?.();
     }
   }
@@ -127,7 +133,10 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
         .select()
         .single()
     );
-    if (res.data) onWorkOrderUpdated(res.data);
+    if (res.data) {
+      logActivity(username, `a mis à jour la maintenance préventive du Work Order (${workOrder.panne_erreur})`);
+      onWorkOrderUpdated(res.data);
+    }
   }
 
   return (

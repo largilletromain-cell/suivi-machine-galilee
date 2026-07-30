@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase, withRetry } from "../lib/supabaseClient";
+import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
 import { IconButton, Panel } from "./ui";
 import { useAccess } from "../lib/access";
 
 const PRESET_MACHINE_TYPES = ["Radixact", "Varian"];
 
 export default function PanneTypesManager() {
-  const { readOnly } = useAccess();
+  const { readOnly, username } = useAccess();
   const [types, setTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newCode, setNewCode] = useState("");
@@ -56,6 +56,7 @@ export default function PanneTypesManager() {
         active: true,
       })
     );
+    logActivity(username, `a ajouté un type de panne (${newMachineType.trim()}, ${newDesc.trim()})`);
     setNewCode("");
     setNewDesc("");
     load();
@@ -65,12 +66,14 @@ export default function PanneTypesManager() {
     await withRetry(() =>
       supabase.from("panne_types").update({ active: !t.active }).eq("id", t.id)
     );
+    logActivity(username, `a ${t.active ? "désactivé" : "réactivé"} un type de panne (${t.description})`);
     load();
   }
 
   async function handleDelete(id) {
     if (!window.confirm("Supprimer définitivement ce type de panne de la liste ?")) return;
     await withRetry(() => supabase.from("panne_types").delete().eq("id", id));
+    logActivity(username, "a supprimé un type de panne");
     load();
   }
 

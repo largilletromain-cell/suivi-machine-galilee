@@ -56,15 +56,38 @@ export async function setAppPassword(newPassword) {
   if (error) throw error;
 }
 
+// Échappe les caractères spéciaux d'ILIKE (% et _) pour un match exact,
+// insensible à la casse.
+function escapeForIlike(s) {
+  return s.replace(/[%_\\]/g, (c) => `\\${c}`);
+}
+
 // Authentifie un compte nominatif (identifiant + mot de passe) et renvoie sa
 // fiche (role, center_id...) si les identifiants correspondent, sinon null.
+// L'identifiant est insensible à la casse (ILIKE) — le mot de passe reste
+// sensible à la casse.
 export async function authenticateUser(username, password) {
   const { data, error } = await supabase
     .from("app_users")
     .select("*")
-    .eq("username", username.trim())
+    .ilike("username", escapeForIlike(username.trim()))
     .eq("password", password)
     .maybeSingle();
   if (error) throw error;
   return data;
+}
+
+// Journal d'activité : enregistre une ligne décrivant une action de
+// modification, et purge en même temps les entrées de plus de 3 mois pour
+// que la table ne grossisse pas indéfiniment.
+export async function logActivity(username, action) {
+  try {
+    await supabase.from("activity_logs").insert({ username: username || "inconnu", action });
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    await supabase.from("activity_logs").delete().lt("created_at", threeMonthsAgo.toISOString());
+  } catch (e) {
+    // La journalisation ne doit jamais bloquer l'action métier elle-même.
+    console.warn("Impossible d'enregistrer le log d'activité :", e);
+  }
 }

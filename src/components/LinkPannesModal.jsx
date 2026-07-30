@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase, withRetry } from "../lib/supabaseClient";
+import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
+import { useAccess } from "../lib/access";
 
 function formatDate(iso) {
   if (!iso) return "—";
@@ -8,6 +9,7 @@ function formatDate(iso) {
 }
 
 export default function LinkPannesModal({ workOrder, machineId, machineName, onClose, onChanged }) {
+  const { username } = useAccess();
   const [pannes, setPannes] = useState([]);
   const [linkedIds, setLinkedIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -62,11 +64,13 @@ export default function LinkPannesModal({ workOrder, machineId, machineName, onC
           next.delete(panne.id);
           return next;
         });
+        logActivity(username, `a délié une panne d'un Work Order (${workOrder.panne_erreur})`);
       } else {
         await withRetry(() =>
           supabase.from("work_order_pannes").insert({ work_order_id: workOrder.id, panne_id: panne.id })
         );
         setLinkedIds((s) => new Set(s).add(panne.id));
+        logActivity(username, `a lié une panne à un Work Order (${workOrder.panne_erreur})`);
       }
       onChanged?.();
     } finally {

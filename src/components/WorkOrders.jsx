@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, Fragment } from "react";
-import { supabase, withRetry } from "../lib/supabaseClient";
+import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
 import { SubTabs, IconButton, Panel, statusSelectStyle } from "./ui";
 import DowntimeModal from "./DowntimeModal";
 import LinkPannesModal from "./LinkPannesModal";
@@ -47,7 +47,7 @@ function compareRows(a, b, field) {
 }
 
 export default function WorkOrders({ centerId }) {
-  const { readOnly } = useAccess();
+  const { readOnly, username } = useAccess();
   const [equipments, setEquipments] = useState([]);
   const [activeEquipmentId, setActiveEquipmentId] = useState(null);
   const [rows, setRows] = useState([]);
@@ -130,6 +130,8 @@ export default function WorkOrders({ centerId }) {
           rapport_recu: form.rapport_recu,
         })
       );
+      const equipmentName = equipments.find((e) => e.id === activeEquipmentId)?.label || "";
+      logActivity(username, `a ajouté un Work Order (${equipmentName}, ${form.panne_erreur})`);
       setForm(emptyForm);
       await loadRows(activeEquipmentId);
     } catch (e) {
@@ -142,11 +144,13 @@ export default function WorkOrders({ centerId }) {
   async function updateField(row, field, value) {
     setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, [field]: value } : r)));
     await withRetry(() => supabase.from("work_orders").update({ [field]: value }).eq("id", row.id));
+    logActivity(username, `a modifié un Work Order (${row.panne_erreur}, champ « ${field} »)`);
   }
 
   async function handleDelete(id) {
     if (!window.confirm("Supprimer ce Work Order et ses immobilisations associées ?")) return;
     await withRetry(() => supabase.from("work_orders").delete().eq("id", id));
+    logActivity(username, "a supprimé un Work Order");
     setRows((r) => r.filter((row) => row.id !== id));
   }
 

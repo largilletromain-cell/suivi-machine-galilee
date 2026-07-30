@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { supabase, withRetry } from "../lib/supabaseClient";
+import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
 import { IconButton } from "./ui";
+import { useAccess } from "../lib/access";
 
 const MONTHS_FR = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
@@ -14,6 +15,7 @@ const emptyHoursForm = () => ({
 });
 
 export default function EditSystemModal({ system, centers, onClose, onSaved }) {
+  const { username } = useAccess();
   const [name, setName] = useState(system.name);
   const [serialNumber, setSerialNumber] = useState(system.serial_number || "");
   const [commissioningDate, setCommissioningDate] = useState(system.commissioning_date || "");
@@ -86,6 +88,7 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
         );
       }
       setSaved(true);
+      logActivity(username, `a modifié le système « ${trimmedName} »`);
       onSaved({
         ...system,
         name: trimmedName,
@@ -121,6 +124,7 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
         )
       );
       setHoursForm(emptyHoursForm());
+      logActivity(username, `a mis à jour la disponibilité théorique de « ${system.name} » (${hoursForm.month}/${hoursForm.year})`);
       loadHours();
     } catch (e) {
       setHoursError("Impossible d'enregistrer ces heures.");
@@ -129,6 +133,7 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
 
   async function handleDeleteHours(id) {
     await withRetry(() => supabase.from("availability_theoretical_hours").delete().eq("id", id));
+    logActivity(username, `a supprimé une disponibilité théorique de « ${system.name} »`);
     setHoursEntries((h) => h.filter((x) => x.id !== id));
   }
 

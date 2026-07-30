@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { supabase, withRetry } from "../lib/supabaseClient";
+import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
 import { SubTabs, IconButton, Panel } from "./ui";
+import { useAccess } from "../lib/access";
 
 const MONTHS_FR = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
@@ -37,6 +38,7 @@ function defaultForm() {
 }
 
 export default function RegistrePannes({ centerId }) {
+  const { readOnly, username } = useAccess();
   const [machines, setMachines] = useState([]);
   const [activeMachineId, setActiveMachineId] = useState(null);
   const [panneTypes, setPanneTypes] = useState([]);
@@ -193,6 +195,8 @@ export default function RegistrePannes({ centerId }) {
         })
       );
       const monthKey = form.date_panne.slice(0, 7);
+      const machineName = machines.find((m) => m.id === activeMachineId)?.label || "";
+      logActivity(username, `a ajouté une panne (${machineName}, ${form.date_panne})`);
       setForm(defaultForm());
       setExpandedMonths((s) => new Set(s).add(monthKey));
       await refreshAfterChange(monthKey);
@@ -205,12 +209,16 @@ export default function RegistrePannes({ centerId }) {
 
   async function updateField(row, field, value) {
     await withRetry(() => supabase.from("pannes").update({ [field]: value }).eq("id", row.id));
+    const machineName = machines.find((m) => m.id === activeMachineId)?.label || "";
+    logActivity(username, `a modifié une panne (${machineName}, champ « ${field} »)`);
     await refreshAfterChange(value && field === "date_panne" ? value.slice(0, 7) : null);
   }
 
   async function handleDelete(id, monthKey) {
     if (!window.confirm("Supprimer cette ligne du registre de pannes ?")) return;
     await withRetry(() => supabase.from("pannes").delete().eq("id", id));
+    const machineName = machines.find((m) => m.id === activeMachineId)?.label || "";
+    logActivity(username, `a supprimé une panne (${machineName})`);
     await refreshAfterChange(monthKey);
   }
 
@@ -230,6 +238,7 @@ export default function RegistrePannes({ centerId }) {
       )}
 
       <Panel>
+        {!readOnly && (
         <form
           onSubmit={handleAdd}
           style={{
@@ -307,6 +316,7 @@ export default function RegistrePannes({ centerId }) {
             {saving ? "…" : "Ajouter"}
           </button>
         </form>
+        )}
 
         {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem" }}>{error}</p>}
 
@@ -322,6 +332,7 @@ export default function RegistrePannes({ centerId }) {
             panneTypes={panneTypes}
             onUpdateField={updateField}
             onDelete={handleDelete}
+            readOnly={readOnly}
           />
         )}
       </Panel>
@@ -338,6 +349,7 @@ function MonthsList({
   panneTypes,
   onUpdateField,
   onDelete,
+  readOnly,
 }) {
   const cKey = currentMonthKey();
   // Le mois en cours apparaît toujours en premier, même sans pannes.
@@ -394,6 +406,7 @@ function MonthsList({
                     panneTypes={panneTypes}
                     onUpdateField={onUpdateField}
                     onDelete={(id) => onDelete(id, monthKey)}
+                    readOnly={readOnly}
                   />
                 )}
               </div>
@@ -405,7 +418,7 @@ function MonthsList({
   );
 }
 
-function PannesTable({ rows, panneTypes, onUpdateField, onDelete }) {
+function PannesTable({ rows, panneTypes, onUpdateField, onDelete, readOnly }) {
   return (
     <table>
       <thead>
@@ -454,6 +467,7 @@ function PannesTable({ rows, panneTypes, onUpdateField, onDelete }) {
                 <input
                   type="date"
                   defaultValue={r.date_panne}
+                  disabled={readOnly}
                   onBlur={(e) => e.target.value && onUpdateField(r, "date_panne", e.target.value)}
                   style={{ width: 130 }}
                 />
@@ -463,6 +477,7 @@ function PannesTable({ rows, panneTypes, onUpdateField, onDelete }) {
                   type="time"
                   className="mono"
                   defaultValue={r.heure_debut?.slice(0, 5)}
+                  disabled={readOnly}
                   onBlur={(e) => e.target.value && onUpdateField(r, "heure_debut", e.target.value)}
                   style={{ width: 100 }}
                 />
@@ -472,6 +487,7 @@ function PannesTable({ rows, panneTypes, onUpdateField, onDelete }) {
                   type="time"
                   className="mono"
                   defaultValue={r.heure_fin?.slice(0, 5) || ""}
+                  disabled={readOnly}
                   onBlur={(e) => onUpdateField(r, "heure_fin", e.target.value || null)}
                   style={{ width: 100 }}
                 />
@@ -479,6 +495,7 @@ function PannesTable({ rows, panneTypes, onUpdateField, onDelete }) {
               <td style={td}>
                 <select
                   value={r.panne_type_id || ""}
+                  disabled={readOnly}
                   onChange={(e) => onUpdateField(r, "panne_type_id", e.target.value || null)}
                   style={{ width: "100%", fontSize: "0.82rem" }}
                 >
@@ -501,15 +518,18 @@ function PannesTable({ rows, panneTypes, onUpdateField, onDelete }) {
                 <input
                   type="text"
                   defaultValue={r.commentaire || ""}
+                  disabled={readOnly}
                   onBlur={(e) => onUpdateField(r, "commentaire", e.target.value || null)}
                   placeholder="Optionnel"
                   style={{ width: "100%" }}
                 />
               </td>
               <td style={td}>
-                <IconButton title="Supprimer" danger onClick={() => onDelete(r.id)}>
-                  ✕
-                </IconButton>
+                {!readOnly && (
+                  <IconButton title="Supprimer" danger onClick={() => onDelete(r.id)}>
+                    ✕
+                  </IconButton>
+                )}
               </td>
             </tr>
           );

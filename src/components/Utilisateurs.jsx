@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { supabase, withRetry } from "../lib/supabaseClient";
+import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
 import { IconButton, Panel } from "./ui";
+import { useAccess } from "../lib/access";
 
 const emptyForm = (centerId) => ({
   full_name: "",
@@ -11,6 +12,7 @@ const emptyForm = (centerId) => ({
 });
 
 export default function Utilisateurs({ centers }) {
+  const { username: currentUsername } = useAccess();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -58,6 +60,7 @@ export default function Utilisateurs({ centers }) {
         center_id: form.center_id || null,
       });
       if (iError) throw iError;
+      logActivity(currentUsername, `a créé le compte « ${form.username.trim()} » (${form.role})`);
       setForm(emptyForm(centers[0]?.id));
       setShowAdd(false);
       await load();
@@ -71,12 +74,14 @@ export default function Utilisateurs({ centers }) {
   async function updateField(user, field, value) {
     setUsers((u) => u.map((x) => (x.id === user.id ? { ...x, [field]: value } : x)));
     await withRetry(() => supabase.from("app_users").update({ [field]: value }).eq("id", user.id));
+    logActivity(currentUsername, `a modifié le compte « ${user.username} » (champ « ${field} »)`);
     load();
   }
 
   async function handleDelete(user) {
     if (!window.confirm(`Supprimer le compte « ${user.full_name || user.username} » ?`)) return;
     await withRetry(() => supabase.from("app_users").delete().eq("id", user.id));
+    logActivity(currentUsername, `a supprimé le compte « ${user.username} »`);
     setUsers((u) => u.filter((x) => x.id !== user.id));
   }
 
