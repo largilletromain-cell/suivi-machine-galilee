@@ -96,12 +96,28 @@ export default function WorkOrders({ centerId }) {
         supabase
           .from("work_orders")
           .select(
-            "*, downtime_periods(id, date_debut, heure_debut, date_fin, heure_fin, commentaire), work_order_pannes(id, pannes(id, date_panne, heure_debut, panne_types(code, description))), resolved_via_wo:work_orders!work_orders_resolved_via_wo_id_fkey(id, panne_erreur, wo_number)"
+            "*, downtime_periods(id, date_debut, heure_debut, date_fin, heure_fin, commentaire), work_order_pannes(id, pannes(id, date_panne, heure_debut, panne_types(code, description)))"
           )
           .eq("equipment_id", equipmentId)
           .order("created_at", { ascending: false })
       );
-      setRows(res.data ?? []);
+      let data = res.data ?? [];
+
+      // Récupéré séparément (plutôt que par jointure automatique, peu fiable
+      // sur une table qui se référence elle-même) : les infos du Work Order
+      // qui a résolu chacune de ces lignes, le cas échéant.
+      const resolvedIds = [...new Set(data.filter((r) => r.resolved_via_wo_id).map((r) => r.resolved_via_wo_id))];
+      if (resolvedIds.length > 0) {
+        const resolvedRes = await withRetry(() =>
+          supabase.from("work_orders").select("id, panne_erreur, wo_number").in("id", resolvedIds)
+        );
+        const byId = Object.fromEntries((resolvedRes.data ?? []).map((wo) => [wo.id, wo]));
+        data = data.map((r) =>
+          r.resolved_via_wo_id ? { ...r, resolved_via_wo: byId[r.resolved_via_wo_id] || null } : r
+        );
+      }
+
+      setRows(data);
     } catch (e) {
       setError("Erreur de chargement des Work Orders.");
     } finally {

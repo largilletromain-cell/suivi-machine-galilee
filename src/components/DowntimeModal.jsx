@@ -154,12 +154,23 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
           statut: resolvedViaOtherWo && resolvedWoId ? "resolu" : workOrder.statut,
         })
         .eq("id", workOrder.id)
-        .select("*, resolved_via_wo:work_orders!work_orders_resolved_via_wo_id_fkey(id, panne_erreur, wo_number)")
+        .select()
         .single()
     );
     if (res.data) {
+      let updated = res.data;
+      if (updated.resolved_via_wo_id) {
+        const otherRes = await withRetry(() =>
+          supabase
+            .from("work_orders")
+            .select("id, panne_erreur, wo_number")
+            .eq("id", updated.resolved_via_wo_id)
+            .single()
+        );
+        updated = { ...updated, resolved_via_wo: otherRes.data || null };
+      }
       logActivity(username, `a lié le Work Order (${workOrder.panne_erreur}) à un autre Work Order résolutif`);
-      onWorkOrderUpdated(res.data);
+      onWorkOrderUpdated(updated);
     }
   }
 
