@@ -96,7 +96,7 @@ export default function WorkOrders({ centerId }) {
         supabase
           .from("work_orders")
           .select(
-            "*, downtime_periods(id, date_debut, heure_debut, date_fin, heure_fin, commentaire), work_order_pannes(id, pannes(id, date_panne, heure_debut, panne_types(code, description)))"
+            "*, downtime_periods(id, date_debut, heure_debut, date_fin, heure_fin, commentaire), work_order_pannes(id, pannes(id, date_panne, heure_debut, panne_types(code, description))), resolved_via_wo:work_orders!resolved_via_wo_id(id, panne_erreur, wo_number)"
           )
           .eq("equipment_id", equipmentId)
           .order("created_at", { ascending: false })
@@ -405,7 +405,7 @@ function SortHeader({ label, field, sort, onSort }) {
 
 function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, onDelete, onOpenModal, onOpenLinkPannes, hasMachine, readOnly }) {
   const linkedPannes = (r.work_order_pannes ?? []).map((wp) => wp.pannes).filter(Boolean);
-  const hasDetails = periods.length > 0 || !!r.commentaires || !!r.resolved_via_maintenance || linkedPannes.length > 0;
+  const hasDetails = periods.length > 0 || !!r.commentaires || !!r.resolved_via_maintenance || !!r.resolved_via_other_wo || linkedPannes.length > 0;
   return (
     <>
       <tr style={{ borderTop: "1px solid var(--border)" }}>
@@ -514,6 +514,7 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
               {expanded ? "▾" : "▸"} {periods.length > 0 ? `${periods.length} immo.` : ""}
               {r.commentaires ? " 💬" : ""}
               {r.resolved_via_maintenance ? " 🔧" : ""}
+              {r.resolved_via_other_wo ? " 🔁" : ""}
               {linkedPannes.length > 0 ? ` 🔗${linkedPannes.length}` : ""}
             </button>
             {!readOnly && (
@@ -581,6 +582,24 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
                 {r.maintenance_commentaire && (
                   <div style={{ marginTop: 2, fontWeight: 400 }}>{r.maintenance_commentaire}</div>
                 )}
+              </div>
+            )}
+            {r.resolved_via_other_wo && r.resolved_via_wo && (
+              <div
+                style={{
+                  background: "var(--accent-soft)",
+                  color: "var(--accent-strong)",
+                  borderRadius: 6,
+                  padding: "6px 10px",
+                  fontSize: "0.78rem",
+                  marginBottom: 8,
+                }}
+              >
+                <div style={{ fontWeight: 600 }}>
+                  🔁 Résolu avec le Work Order{" "}
+                  {r.resolved_via_wo.wo_number ? `#${r.resolved_via_wo.wo_number} — ` : ""}
+                  {r.resolved_via_wo.panne_erreur}
+                </div>
               </div>
             )}
             {linkedPannes.length > 0 && (

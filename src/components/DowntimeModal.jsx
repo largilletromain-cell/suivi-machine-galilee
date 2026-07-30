@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
 import { IconButton } from "./ui";
 import { useAccess } from "../lib/access";
@@ -17,13 +17,30 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
   const [maintenanceCommentaire, setMaintenanceCommentaire] = useState(
     workOrder.maintenance_commentaire || ""
   );
+  const [resolvedViaOtherWo, setResolvedViaOtherWo] = useState(workOrder.resolved_via_other_wo || false);
+  const [resolvedWoId, setResolvedWoId] = useState(workOrder.resolved_via_wo_id || "");
+  const [otherWorkOrders, setOtherWorkOrders] = useState([]);
+  const [woFilter, setWoFilter] = useState("");
   const [error, setError] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(emptyPeriod);
 
   useEffect(() => {
     load();
+    loadOtherWorkOrders();
   }, []);
+
+  async function loadOtherWorkOrders() {
+    const res = await withRetry(() =>
+      supabase
+        .from("work_orders")
+        .select("id, panne_erreur, wo_number")
+        .eq("equipment_id", workOrder.equipment_id)
+        .neq("id", workOrder.id)
+        .order("created_at", { ascending: false })
+    );
+    setOtherWorkOrders(res.data ?? []);
+  }
 
   async function load() {
     setLoading(true);
@@ -116,6 +133,33 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
       setPeriods((ps) => ps.map((x) => (x.id === p.id ? res.data : x)));
       logActivity(username, `a supprimé le commentaire d'une immobilisation (${workOrder.panne_erreur})`);
       onPeriodsChanged?.();
+    }
+  }
+
+  const filteredOtherWorkOrders = useMemo(() => {
+    if (!woFilter.trim()) return otherWorkOrders;
+    const f = woFilter.toLowerCase();
+    return otherWorkOrders.filter(
+      (wo) => wo.panne_erreur?.toLowerCase().includes(f) || wo.wo_number?.toLowerCase().includes(f)
+    );
+  }, [otherWorkOrders, woFilter]);
+
+  async function handleSaveOtherWo() {
+    const res = await withRetry(() =>
+      supabase
+        .from("work_orders")
+        .update({
+          resolved_via_other_wo: resolvedViaOtherWo,
+          resolved_via_wo_id: resolvedViaOtherWo ? resolvedWoId || null : null,
+          statut: resolvedViaOtherWo && resolvedWoId ? "resolu" : workOrder.statut,
+        })
+        .eq("id", workOrder.id)
+        .select("*, resolved_via_wo:work_orders!resolved_via_wo_id(id, panne_erreur, wo_number)")
+        .single()
+    );
+    if (res.data) {
+      logActivity(username, `a lié le Work Order (${workOrder.panne_erreur}) à un autre Work Order résolutif`);
+      onWorkOrderUpdated(res.data);
     }
   }
 
@@ -218,6 +262,64 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
           )}
           <button
             onClick={handleSaveMaintenance}
+            style={{
+              marginTop: 10,
+              background: "var(--accent)",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              padding: "6px 14px",
+              fontSize: "0.82rem",
+              fontWeight: 600,
+            }}
+          >
+            Enregistrer
+          </button>
+        </div>
+
+        <div
+          style={{
+            marginTop: 12,
+            padding: 14,
+            background: "var(--paper)",
+            borderRadius: 8,
+            border: "1px solid var(--border)",
+          }}
+        >
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.85rem", fontWeight: 600 }}>
+            <input
+              type="checkbox"
+              checked={resolvedViaOtherWo}
+              onChange={(e) => setResolvedViaOtherWo(e.target.checked)}
+            />
+            Résolu avec un autre Work Order
+          </label>
+          {resolvedViaOtherWo && (
+            <div style={{ marginTop: 8 }}>
+              <input
+                type="text"
+                value={woFilter}
+                onChange={(e) => setWoFilter(e.target.value)}
+                placeholder="Filtrer par intitulé ou n° de WO…"
+                style={{ width: "100%", marginBottom: 8 }}
+              />
+              <select
+                value={resolvedWoId}
+                onChange={(e) => setResolvedWoId(e.target.value)}
+                style={{ width: "100%" }}
+              >
+                <option value="">— Sélectionner le Work Order résolutif —</option>
+                {filteredOtherWorkOrders.map((wo) => (
+                  <option key={wo.id} value={wo.id}>
+                    {wo.wo_number ? `#${wo.wo_number} — ` : ""}
+                    {wo.panne_erreur}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <button
+            onClick={handleSaveOtherWo}
             style={{
               marginTop: 10,
               background: "var(--accent)",
