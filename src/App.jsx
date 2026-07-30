@@ -29,7 +29,10 @@ const TABS_BY_ROLE = {
   visualisation: ["pannes", "wo", "interventions", "stats", "types", "parametrage"],
   physicien: ["pannes", "wo", "interventions", "stats", "types", "parametrage"],
   admin: ["pannes", "wo", "interventions", "stats", "types", "parametrage", "utilisateurs"],
-  full: ["pannes", "wo", "interventions", "stats", "types", "parametrage"],
+  // "full" (mot de passe partagé) voit aussi Utilisateurs : c'est la seule
+  // façon de créer le tout premier compte admin, puisque la table des
+  // comptes est vide au départ.
+  full: ["pannes", "wo", "interventions", "stats", "types", "parametrage", "utilisateurs"],
 };
 
 // Lien direct type https://votre-site.vercel.app/?vue=registre : accès
