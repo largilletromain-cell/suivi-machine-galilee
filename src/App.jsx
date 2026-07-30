@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase, withRetry } from "./lib/supabaseClient";
 import { AccessContext } from "./lib/access";
 import PasswordGate from "./components/PasswordGate";
-import ChangePasswordModal from "./components/ChangePasswordModal";
 import RegistrePannes from "./components/RegistrePannes";
 import WorkOrders from "./components/WorkOrders";
 import PanneTypesManager from "./components/PanneTypesManager";
@@ -23,16 +22,12 @@ const ALL_TABS = [
 
 // Onglets visibles par rôle. "manipulateur" est l'accès rapide sans mot de
 // passe (un bouton par centre sur l'écran d'accès) ; les 3 autres sont des
-// rôles de comptes nominatifs, "full" est l'ancien mot de passe partagé.
+// rôles de comptes nominatifs.
 const TABS_BY_ROLE = {
   manipulateur: ["pannes", "types"],
   visualisation: ["pannes", "wo", "interventions", "stats", "types", "parametrage"],
   physicien: ["pannes", "wo", "interventions", "stats", "types", "parametrage"],
   admin: ["pannes", "wo", "interventions", "stats", "types", "parametrage", "utilisateurs"],
-  // "full" (mot de passe partagé) voit aussi Utilisateurs : c'est la seule
-  // façon de créer le tout premier compte admin, puisque la table des
-  // comptes est vide au départ.
-  full: ["pannes", "wo", "interventions", "stats", "types", "parametrage", "utilisateurs"],
 };
 
 // Lien direct type https://votre-site.vercel.app/?vue=registre : accès
@@ -49,7 +44,6 @@ export default function App() {
   const [centerId, setCenterId] = useState(null); // centre actuellement affiché
   const [activeTab, setActiveTab] = useState("pannes");
   const [loadError, setLoadError] = useState(null);
-  const [showChangePassword, setShowChangePassword] = useState(false);
 
   // Les centres sont publics à lister (aucune donnée sensible), on les
   // charge avant même la connexion pour afficher les boutons Manipulateur
@@ -75,7 +69,6 @@ export default function App() {
   function handleUnlock({ mode, role, centerId: fixedCenterId, username }) {
     let finalRole = role;
     if (mode === "manipulateur") finalRole = "manipulateur";
-    if (mode === "full") finalRole = "full";
 
     const resolvedCenterId =
       fixedCenterId || (urlAsksRestricted() ? centers[0]?.id : null) || centers[0]?.id || null;
@@ -183,22 +176,6 @@ export default function App() {
                 </h1>
               )}
             </div>
-            {(session.role === "full" || session.role === "admin") && (
-              <button
-                onClick={() => setShowChangePassword(true)}
-                style={{
-                  border: "1px solid #33424a",
-                  background: "transparent",
-                  color: "var(--rail-ink)",
-                  borderRadius: 999,
-                  padding: "6px 14px",
-                  fontSize: "0.75rem",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                🔒 Changer le mot de passe
-              </button>
-            )}
           </div>
           <nav style={{ display: "flex", gap: 4 }}>
             {visibleTabs.map((t) => {
@@ -261,8 +238,6 @@ export default function App() {
             </>
           )}
         </main>
-
-        {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
       </div>
     </AccessContext.Provider>
   );

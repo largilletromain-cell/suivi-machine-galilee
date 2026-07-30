@@ -1,33 +1,11 @@
 import { useState } from "react";
-import { getAppPassword, authenticateUser } from "../lib/supabaseClient";
+import { authenticateUser } from "../lib/supabaseClient";
 
 export default function PasswordGate({ centers, onUnlock }) {
-  const [value, setValue] = useState("");
-  const [error, setError] = useState("");
-  const [checking, setChecking] = useState(false);
-
   const [username, setUsername] = useState("");
   const [userPassword, setUserPassword] = useState("");
   const [userError, setUserError] = useState("");
   const [checkingUser, setCheckingUser] = useState(false);
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setChecking(true);
-    setError("");
-    try {
-      const expected = await getAppPassword();
-      if (!expected || value === expected) {
-        onUnlock({ mode: "full" });
-      } else {
-        setError("Mot de passe incorrect.");
-      }
-    } catch (err) {
-      setError("Impossible de vérifier le mot de passe pour le moment. Réessayez.");
-    } finally {
-      setChecking(false);
-    }
-  }
 
   async function handleUserSubmit(e) {
     e.preventDefault();
@@ -158,40 +136,6 @@ export default function PasswordGate({ centers, onUnlock }) {
             }}
           >
             {checkingUser ? "…" : "Se connecter"}
-          </button>
-        </form>
-
-        <Divider />
-
-        <div style={{ fontSize: "0.78rem", color: "var(--ink-soft)", margin: "16px 0 8px", fontWeight: 600 }}>
-          Accès complet (mot de passe partagé)
-        </div>
-        <form onSubmit={handleSubmit}>
-          <input
-            type="password"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder="Mot de passe"
-            style={{ width: "100%", marginBottom: 8 }}
-          />
-          {error && (
-            <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem", margin: "0 0 8px" }}>{error}</p>
-          )}
-          <button
-            type="submit"
-            disabled={checking}
-            style={{
-              width: "100%",
-              background: "var(--surface)",
-              color: "var(--ink)",
-              border: "1px solid var(--border)",
-              borderRadius: 6,
-              padding: "9px 0",
-              fontWeight: 600,
-              fontSize: "0.85rem",
-            }}
-          >
-            {checking ? "…" : "Entrer"}
           </button>
         </form>
       </div>
