@@ -107,7 +107,22 @@ export default function Statistiques({ centerId }) {
           : Promise.resolve({ data: [] }),
       ]);
       setTheoreticalHours(hoursRes.data ?? []);
-      setWorkOrders(woRes.data ?? []);
+
+      // Complète chaque WO résolu par un autre WO avec le commentaire de ce
+      // dernier (récupéré séparément, plus fiable qu'une jointure automatique
+      // sur une table qui se référence elle-même).
+      let woData = woRes.data ?? [];
+      const resolvedIds = [...new Set(woData.filter((w) => w.resolved_via_wo_id).map((w) => w.resolved_via_wo_id))];
+      if (resolvedIds.length > 0) {
+        const resolvedRes = await withRetry(() =>
+          supabase.from("work_orders").select("id, commentaires").in("id", resolvedIds)
+        );
+        const byId = Object.fromEntries((resolvedRes.data ?? []).map((w) => [w.id, w]));
+        woData = woData.map((w) =>
+          w.resolved_via_wo_id ? { ...w, resolved_via_wo: byId[w.resolved_via_wo_id] || null } : w
+        );
+      }
+      setWorkOrders(woData);
       setInterventions(intRes.data ?? []);
       setPannes(pannesRes.data ?? []);
 
@@ -181,7 +196,11 @@ export default function Statistiques({ centerId }) {
         .filter((p) => p.commentaire)
         .map((p) => p.commentaire)
         .join(" ; ");
-      const commentaire = [wo.commentaires, periodComments].filter(Boolean).join(" — ");
+      const otherWoComment =
+        wo.resolved_via_other_wo && wo.resolved_via_wo?.commentaires
+          ? `Résolu avec un autre WO : ${wo.resolved_via_wo.commentaires}`
+          : "";
+      const commentaire = [wo.commentaires, periodComments, otherWoComment].filter(Boolean).join(" — ");
       return {
         id: `wo-${wo.id}`,
         eventType: "corrective",

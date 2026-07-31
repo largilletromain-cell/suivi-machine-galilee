@@ -109,7 +109,7 @@ export default function WorkOrders({ centerId }) {
       const resolvedIds = [...new Set(data.filter((r) => r.resolved_via_wo_id).map((r) => r.resolved_via_wo_id))];
       if (resolvedIds.length > 0) {
         const resolvedRes = await withRetry(() =>
-          supabase.from("work_orders").select("id, panne_erreur, wo_number").in("id", resolvedIds)
+          supabase.from("work_orders").select("id, panne_erreur, wo_number, commentaires").in("id", resolvedIds)
         );
         const byId = Object.fromEntries((resolvedRes.data ?? []).map((wo) => [wo.id, wo]));
         data = data.map((r) =>
@@ -613,10 +613,11 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
                 }}
               >
                 <div style={{ fontWeight: 600 }}>
-                  🔁 Résolu avec le Work Order{" "}
-                  {resolvedWo.wo_number ? `#${resolvedWo.wo_number} — ` : ""}
-                  {resolvedWo.panne_erreur}
+                  🔁 Résolu avec le Work Order {resolvedWo.wo_number ? `#${resolvedWo.wo_number}` : ""}
                 </div>
+                {resolvedWo.commentaires && (
+                  <div style={{ marginTop: 2, fontWeight: 400 }}>{resolvedWo.commentaires}</div>
+                )}
               </div>
             )}
             {linkedPannes.length > 0 && (
