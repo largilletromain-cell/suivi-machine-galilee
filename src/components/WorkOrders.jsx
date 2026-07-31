@@ -109,9 +109,20 @@ export default function WorkOrders({ centerId }) {
       const resolvedIds = [...new Set(data.filter((r) => r.resolved_via_wo_id).map((r) => r.resolved_via_wo_id))];
       if (resolvedIds.length > 0) {
         const resolvedRes = await withRetry(() =>
-          supabase.from("work_orders").select("id, panne_erreur, wo_number, commentaires").in("id", resolvedIds)
+          supabase
+            .from("work_orders")
+            .select("id, panne_erreur, wo_number, downtime_periods(commentaire)")
+            .in("id", resolvedIds)
         );
-        const byId = Object.fromEntries((resolvedRes.data ?? []).map((wo) => [wo.id, wo]));
+        const byId = Object.fromEntries(
+          (resolvedRes.data ?? []).map((wo) => {
+            const comment = (wo.downtime_periods || [])
+              .filter((p) => p.commentaire)
+              .map((p) => p.commentaire)
+              .join(" ; ");
+            return [wo.id, { ...wo, immobilisationComment: comment }];
+          })
+        );
         data = data.map((r) =>
           r.resolved_via_wo_id ? { ...r, resolved_via_wo: byId[r.resolved_via_wo_id] || null } : r
         );
@@ -623,8 +634,8 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
                 <div style={{ fontWeight: 600 }}>
                   🔁 Résolu avec le Work Order {resolvedWo.wo_number ? `#${resolvedWo.wo_number}` : ""}
                 </div>
-                {resolvedWo.commentaires && (
-                  <div style={{ marginTop: 2, fontWeight: 400 }}>{resolvedWo.commentaires}</div>
+                {resolvedWo.immobilisationComment && (
+                  <div style={{ marginTop: 2, fontWeight: 400 }}>{resolvedWo.immobilisationComment}</div>
                 )}
               </div>
             )}

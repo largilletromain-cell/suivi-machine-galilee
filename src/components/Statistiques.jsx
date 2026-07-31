@@ -115,9 +115,17 @@ export default function Statistiques({ centerId }) {
       const resolvedIds = [...new Set(woData.filter((w) => w.resolved_via_wo_id).map((w) => w.resolved_via_wo_id))];
       if (resolvedIds.length > 0) {
         const resolvedRes = await withRetry(() =>
-          supabase.from("work_orders").select("id, commentaires").in("id", resolvedIds)
+          supabase.from("work_orders").select("id, downtime_periods(commentaire)").in("id", resolvedIds)
         );
-        const byId = Object.fromEntries((resolvedRes.data ?? []).map((w) => [w.id, w]));
+        const byId = Object.fromEntries(
+          (resolvedRes.data ?? []).map((w) => {
+            const comment = (w.downtime_periods || [])
+              .filter((p) => p.commentaire)
+              .map((p) => p.commentaire)
+              .join(" ; ");
+            return [w.id, { ...w, immobilisationComment: comment }];
+          })
+        );
         woData = woData.map((w) =>
           w.resolved_via_wo_id ? { ...w, resolved_via_wo: byId[w.resolved_via_wo_id] || null } : w
         );
@@ -197,8 +205,8 @@ export default function Statistiques({ centerId }) {
         .map((p) => p.commentaire)
         .join(" ; ");
       const otherWoComment =
-        wo.resolved_via_other_wo && wo.resolved_via_wo?.commentaires
-          ? `Résolu avec un autre WO : ${wo.resolved_via_wo.commentaires}`
+        wo.resolved_via_other_wo && wo.resolved_via_wo?.immobilisationComment
+          ? `Résolu avec un autre WO : ${wo.resolved_via_wo.immobilisationComment}`
           : "";
       const commentaire = [wo.commentaires, periodComments, otherWoComment].filter(Boolean).join(" — ");
       return {

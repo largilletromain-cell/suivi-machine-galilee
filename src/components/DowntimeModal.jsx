@@ -150,11 +150,17 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
       const otherRes = await withRetry(() =>
         supabase
           .from("work_orders")
-          .select("id, panne_erreur, wo_number, commentaires, date_intervention")
+          .select("id, panne_erreur, wo_number, date_intervention, downtime_periods(commentaire)")
           .eq("id", resolvedWoId)
           .single()
       );
-      otherWoData = otherRes.data || null;
+      if (otherRes.data) {
+        const comment = (otherRes.data.downtime_periods || [])
+          .filter((p) => p.commentaire)
+          .map((p) => p.commentaire)
+          .join(" ; ");
+        otherWoData = { ...otherRes.data, immobilisationComment: comment };
+      }
     }
     const res = await withRetry(() =>
       supabase
