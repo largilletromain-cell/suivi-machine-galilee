@@ -13,7 +13,7 @@ import {
   CartesianGrid,
   ReferenceLine,
 } from "recharts";
-import { supabase, withRetry } from "../lib/supabaseClient";
+import { supabase, withRetry, getOpeningHours } from "../lib/supabaseClient";
 import { SubTabs, Panel } from "./ui";
 import { computeMonthlyStats, CATEGORY_KEYS } from "../lib/availability";
 
@@ -57,7 +57,7 @@ function hexToRgb(hex) {
 export default function Statistiques({ centerId }) {
   const [machines, setMachines] = useState([]);
   const [activeMachineId, setActiveMachineId] = useState(null);
-  const [theoreticalHours, setTheoreticalHours] = useState([]);
+  const [openingHours, setOpeningHoursState] = useState({ start: "08:00", end: "18:00" });
   const [workOrders, setWorkOrders] = useState([]);
   const [interventions, setInterventions] = useState([]);
   const [pannes, setPannes] = useState([]);
@@ -68,6 +68,7 @@ export default function Statistiques({ centerId }) {
 
   useEffect(() => {
     loadMachines();
+    getOpeningHours().then(setOpeningHoursState);
   }, [centerId]);
 
   useEffect(() => {
@@ -89,8 +90,7 @@ export default function Statistiques({ centerId }) {
     const equipmentId = system?.wo_equipment_id;
     const machineId = system?.machine_id;
     try {
-      const [hoursRes, woRes, intRes, pannesRes] = await Promise.all([
-        withRetry(() => supabase.from("availability_theoretical_hours").select("*").eq("system_id", systemId)),
+      const [woRes, intRes, pannesRes] = await Promise.all([
         equipmentId
           ? withRetry(() =>
               supabase
@@ -106,7 +106,6 @@ export default function Statistiques({ centerId }) {
           ? withRetry(() => supabase.from("pannes").select("id, date_panne").eq("machine_id", machineId))
           : Promise.resolve({ data: [] }),
       ]);
-      setTheoreticalHours(hoursRes.data ?? []);
 
       // Complète chaque WO résolu par un autre WO avec le commentaire de ce
       // dernier (récupéré séparément, plus fiable qu'une jointure automatique
@@ -134,28 +133,36 @@ export default function Statistiques({ centerId }) {
       setInterventions(intRes.data ?? []);
       setPannes(pannesRes.data ?? []);
 
-      const months = (hoursRes.data ?? [])
-        .map((h) => `${h.year}-${h.month}`)
-        .sort();
       const now = new Date();
-      const currentKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
-      setSelectedMonthKey(months.includes(currentKey) ? currentKey : months[months.length - 1] || null);
+      setSelectedMonthKey(`${now.getFullYear()}-${now.getMonth() + 1}`);
     } finally {
       setLoading(false);
     }
   }
 
-  // Liste de tous les mois où une disponibilité théorique a été saisie,
-  // triés chronologiquement.
+  // Fenêtre de mois analysables : 24 mois en arrière, 3 mois en avant — la
+  // disponibilité théorique est désormais calculée automatiquement pour
+  // n'importe quel mois, plus besoin de l'avoir saisie au préalable.
   const allMonths = useMemo(() => {
-    return theoreticalHours
-      .map((h) => ({ year: h.year, month: h.month }))
-      .sort((a, b) => (a.year - b.year) || (a.month - b.month));
-  }, [theoreticalHours]);
+    const now = new Date();
+    const list = [];
+    for (let i = 24; i >= -3; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      list.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+    }
+    return list;
+  }, []);
 
   const stats = useMemo(
-    () => computeMonthlyStats({ months: allMonths, workOrders, interventions, theoreticalHours }),
-    [allMonths, workOrders, interventions, theoreticalHours]
+    () =>
+      computeMonthlyStats({
+        months: allMonths,
+        workOrders,
+        interventions,
+        openingStart: openingHours.start,
+        openingEnd: openingHours.end,
+      }),
+    [allMonths, workOrders, interventions, openingHours]
   );
 
   const selectedStat = useMemo(() => {
@@ -389,13 +396,6 @@ export default function Statistiques({ centerId }) {
 
       {loading ? (
         <p style={{ color: "var(--ink-soft)" }}>Chargement…</p>
-      ) : allMonths.length === 0 ? (
-        <Panel>
-          <p style={{ color: "var(--ink-soft)", fontSize: "0.88rem", margin: 0 }}>
-            Aucune disponibilité théorique n'a été saisie pour cette machine. Ajoutez-en dans{" "}
-            <strong>Paramétrage → ✎ Modifier</strong> pour faire apparaître les statistiques ici.
-          </p>
-        </Panel>
       ) : (
         <>
           <div style={{ margin: "14px 0" }}>

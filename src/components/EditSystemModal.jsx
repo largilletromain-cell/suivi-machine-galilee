@@ -16,12 +16,6 @@ const CATEGORY_LABELS = {
   equipement: "Équipement",
 };
 
-const emptyHoursForm = () => ({
-  year: new Date().getFullYear(),
-  month: new Date().getMonth() + 1,
-  hours: "",
-});
-
 const emptyVersionForm = () => ({ version_date: "", version_label: "", commentaire: "" });
 const emptyCalibrationForm = () => ({ calibration_date: "", commentaire: "" });
 
@@ -48,6 +42,7 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
   const [manufacturer, setManufacturer] = useState(system.manufacturer || "");
   const [serialNumber, setSerialNumber] = useState(system.serial_number || "");
   const [commissioningDate, setCommissioningDate] = useState(system.commissioning_date || "");
+  const [decommissionDate, setDecommissionDate] = useState(system.decommission_date || "");
   const [notes, setNotes] = useState(system.notes || "");
   const [centerId, setCenterId] = useState(system.center_id);
   const [asnrDate, setAsnrDate] = useState(system.asnr_renewal_date || "");
@@ -57,11 +52,6 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
-
-  const [hoursEntries, setHoursEntries] = useState([]);
-  const [loadingHours, setLoadingHours] = useState(true);
-  const [hoursForm, setHoursForm] = useState(emptyHoursForm);
-  const [hoursError, setHoursError] = useState("");
 
   const [versions, setVersions] = useState([]);
   const [loadingVersions, setLoadingVersions] = useState(true);
@@ -74,24 +64,9 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
   const [calibrationError, setCalibrationError] = useState("");
 
   useEffect(() => {
-    if (isMachine) loadHours();
     if (isMachine || isLogiciel) loadVersions();
     if (isMesure) loadCalibrations();
   }, []);
-
-  async function loadHours() {
-    setLoadingHours(true);
-    const res = await withRetry(() =>
-      supabase
-        .from("availability_theoretical_hours")
-        .select("*")
-        .eq("system_id", system.id)
-        .order("year", { ascending: false })
-        .order("month", { ascending: false })
-    );
-    setHoursEntries(res.data ?? []);
-    setLoadingHours(false);
-  }
 
   async function loadVersions() {
     setLoadingVersions(true);
@@ -135,6 +110,7 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
         manufacturer: manufacturer || null,
         serial_number: serialNumber || null,
         commissioning_date: commissioningDate || null,
+        decommission_date: decommissionDate || null,
         notes: notes || null,
         center_id: centerId,
       };
@@ -174,39 +150,6 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
     } finally {
       setSaving(false);
     }
-  }
-
-  async function handleAddHours(e) {
-    e.preventDefault();
-    if (!hoursForm.hours || Number(hoursForm.hours) <= 0) {
-      setHoursError("Renseignez un nombre d'heures valide.");
-      return;
-    }
-    setHoursError("");
-    try {
-      await withRetry(() =>
-        supabase.from("availability_theoretical_hours").upsert(
-          {
-            system_id: system.id,
-            year: Number(hoursForm.year),
-            month: Number(hoursForm.month),
-            hours: Number(hoursForm.hours),
-          },
-          { onConflict: "system_id,year,month" }
-        )
-      );
-      setHoursForm(emptyHoursForm());
-      logActivity(username, `a mis à jour la disponibilité théorique de « ${system.name} » (${hoursForm.month}/${hoursForm.year})`);
-      loadHours();
-    } catch (e) {
-      setHoursError("Impossible d'enregistrer ces heures.");
-    }
-  }
-
-  async function handleDeleteHours(id) {
-    await withRetry(() => supabase.from("availability_theoretical_hours").delete().eq("id", id));
-    logActivity(username, `a supprimé une disponibilité théorique de « ${system.name} »`);
-    setHoursEntries((h) => h.filter((x) => x.id !== id));
   }
 
   async function handleAddVersion(e) {
@@ -371,6 +314,19 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
             onChange={(e) => setCommissioningDate(e.target.value)}
             style={{ marginBottom: 10 }}
           />
+
+          <FieldLabel>Date de mise au rebut (optionnel)</FieldLabel>
+          <input
+            type="date"
+            value={decommissionDate}
+            onChange={(e) => setDecommissionDate(e.target.value)}
+            style={{ marginBottom: 10 }}
+          />
+          {decommissionDate && (
+            <p style={{ fontSize: "0.72rem", color: "var(--status-bad-ink)", margin: "-6px 0 10px" }}>
+              Ce matériel apparaîtra en rouge, tout en bas de sa catégorie dans le Registre du matériel.
+            </p>
+          )}
 
           {isMachine && (
             <div
@@ -616,93 +572,11 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
         )}
 
         {isMachine && (
-          <>
-            <h4 style={{ margin: "22px 0 6px", fontSize: "0.85rem", color: "var(--ink-soft)" }}>
-              Temps de disponibilité théorique (heures / mois)
-            </h4>
-            <p style={{ fontSize: "0.75rem", color: "var(--ink-soft)", margin: "0 0 10px" }}>
-              Utilisé pour les calculs de taux de disponibilité de l'onglet Statistiques.
-            </p>
-
-            <form
-              onSubmit={handleAddHours}
-              style={{ display: "grid", gridTemplateColumns: "100px 140px 120px auto", gap: 6, marginBottom: 12 }}
-            >
-              <MiniField label="Année">
-                <input
-                  type="number"
-                  value={hoursForm.year}
-                  onChange={(e) => setHoursForm({ ...hoursForm, year: e.target.value })}
-                  style={{ width: "100%" }}
-                />
-              </MiniField>
-              <MiniField label="Mois">
-                <select
-                  value={hoursForm.month}
-                  onChange={(e) => setHoursForm({ ...hoursForm, month: e.target.value })}
-                  style={{ width: "100%" }}
-                >
-                  {MONTHS_FR.map((m, i) => (
-                    <option key={m} value={i + 1}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </MiniField>
-              <MiniField label="Heures">
-                <input
-                  type="number"
-                  step="0.1"
-                  value={hoursForm.hours}
-                  onChange={(e) => setHoursForm({ ...hoursForm, hours: e.target.value })}
-                  placeholder="ex : 720"
-                  style={{ width: "100%" }}
-                />
-              </MiniField>
-              <button
-                type="submit"
-                style={{
-                  alignSelf: "end",
-                  background: "var(--accent)",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 6,
-                  padding: "6px 14px",
-                  fontSize: "0.8rem",
-                  height: 32,
-                }}
-              >
-                + Ajouter
-              </button>
-            </form>
-            {hoursError && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem" }}>{hoursError}</p>}
-
-            {loadingHours ? (
-              <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Chargement…</p>
-            ) : hoursEntries.length === 0 ? (
-              <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Aucune heure théorique enregistrée.</p>
-            ) : (
-              <table>
-                <tbody>
-                  {hoursEntries.map((h) => (
-                    <tr key={h.id} style={{ borderTop: "1px solid var(--border)" }}>
-                      <td style={{ padding: "6px 8px", fontSize: "0.85rem" }}>
-                        {MONTHS_FR[h.month - 1]} {h.year}
-                      </td>
-                      <td style={{ padding: "6px 8px", fontSize: "0.85rem" }} className="mono">
-                        {h.hours} h
-                      </td>
-                      <td style={{ padding: "6px 8px" }}>
-                        <IconButton title="Supprimer" danger onClick={() => handleDeleteHours(h.id)}>
-                          ✕
-                        </IconButton>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </>
+          <p style={{ fontSize: "0.78rem", color: "var(--ink-soft)", marginTop: 18 }}>
+            La disponibilité théorique de cette machine est désormais calculée automatiquement dans
+            l'onglet Statistiques, à partir des horaires d'ouverture réglés dans l'onglet{" "}
+            <strong>Paramètres</strong>.
+          </p>
         )}
       </div>
     </div>

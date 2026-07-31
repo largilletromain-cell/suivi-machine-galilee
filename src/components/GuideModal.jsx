@@ -101,7 +101,7 @@ export default function GuideModal({ onClose }) {
             <li>Histogramme de projection : 2 derniers mois, mois en cours, 3 prochains mois.</li>
             <li>Graphique d'évolution sur 12 mois glissants (WO ouverts / pannes signalées).</li>
             <li>Bouton <strong>📄 Générer le rapport PDF</strong> pour exporter tout ça en un document à transmettre.</li>
-            <li>Nécessite d'avoir saisi une disponibilité théorique par mois dans Registre du matériel.</li>
+            <li>Nécessite d'avoir renseigné les horaires d'ouverture des machines dans l'onglet Paramètres.</li>
           </ul>
         </Section>
 
@@ -128,9 +128,19 @@ export default function GuideModal({ onClose }) {
               Bouton <strong>✎ Modifier</strong> pour changer le nom, le constructeur, le centre, le n°
               de série, la date de mise en service, et selon la catégorie : les échéances de la machine
               (ASNR, contrôle qualité externe, EQUAL ESTRO), l'historique des versions (machine/logiciel),
-              la fréquence d'étalonnage (matériel de mesure), ou la disponibilité théorique mensuelle.
+              la fréquence d'étalonnage (matériel de mesure), ou une date de mise au rebut.
             </li>
             <li>La suppression d'un matériel efface aussi définitivement tout son historique de pannes/Work Orders.</li>
+          </ul>
+        </Section>
+
+        <Section title="Paramètres">
+          <ul style={ulStyle}>
+            <li>
+              Réglez ici les horaires d'ouverture des machines (début/fin de journée) — utilisés pour
+              calculer <strong>automatiquement</strong> la disponibilité théorique de chaque mois dans
+              Statistiques (jours ouvrés × amplitude horaire), sans plus avoir à la saisir mois par mois.
+            </li>
           </ul>
         </Section>
 

@@ -82,7 +82,9 @@ export default function RegistreMateriel({ centerId, centers, onCentersChanged }
   const grouped = CATEGORY_ORDER.map((cat) => ({
     key: cat,
     label: CATEGORY_LABELS[cat],
-    items: systems.filter((s) => (s.category || "machine") === cat),
+    items: systems
+      .filter((s) => (s.category || "machine") === cat)
+      .sort((a, b) => (a.decommission_date ? 1 : 0) - (b.decommission_date ? 1 : 0)),
   })).filter((g) => g.items.length > 0);
 
   return (
@@ -175,9 +177,25 @@ export default function RegistreMateriel({ centerId, centers, onCentersChanged }
                         </tr>
                       </thead>
                       <tbody>
-                        {group.items.map((s) => (
-                          <tr key={s.id} style={{ borderTop: "1px solid var(--border)" }}>
-                            <td style={td}>{s.name}</td>
+                        {group.items.map((s) => {
+                          const isDecommissioned = !!s.decommission_date;
+                          return (
+                          <tr
+                            key={s.id}
+                            style={{
+                              borderTop: "1px solid var(--border)",
+                              background: isDecommissioned ? "var(--status-bad-bg)" : "transparent",
+                              color: isDecommissioned ? "var(--status-bad-ink)" : "inherit",
+                            }}
+                          >
+                            <td style={td}>
+                              {s.name}
+                              {isDecommissioned && (
+                                <span style={{ marginLeft: 6, fontSize: "0.7rem", fontWeight: 700 }}>
+                                  ⛔ Mis au rebut le {formatDate(s.decommission_date)}
+                                </span>
+                              )}
+                            </td>
                             <td style={td}>{s.manufacturer || "—"}</td>
                             <td style={td} className="mono">
                               {s.serial_number || "—"}
@@ -216,7 +234,8 @@ export default function RegistreMateriel({ centerId, centers, onCentersChanged }
                               )}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   )}
