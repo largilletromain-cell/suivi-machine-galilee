@@ -145,6 +145,17 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
   }, [otherWorkOrders, woFilter]);
 
   async function handleSaveOtherWo() {
+    let otherWoData = null;
+    if (resolvedViaOtherWo && resolvedWoId) {
+      const otherRes = await withRetry(() =>
+        supabase
+          .from("work_orders")
+          .select("id, panne_erreur, wo_number, commentaires, date_intervention")
+          .eq("id", resolvedWoId)
+          .single()
+      );
+      otherWoData = otherRes.data || null;
+    }
     const res = await withRetry(() =>
       supabase
         .from("work_orders")
@@ -152,23 +163,15 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
           resolved_via_other_wo: resolvedViaOtherWo,
           resolved_via_wo_id: resolvedViaOtherWo ? resolvedWoId || null : null,
           statut: resolvedViaOtherWo && resolvedWoId ? "resolu" : workOrder.statut,
+          date_intervention:
+            resolvedViaOtherWo && otherWoData ? otherWoData.date_intervention : workOrder.date_intervention,
         })
         .eq("id", workOrder.id)
         .select()
         .single()
     );
     if (res.data) {
-      let updated = res.data;
-      if (updated.resolved_via_wo_id) {
-        const otherRes = await withRetry(() =>
-          supabase
-            .from("work_orders")
-            .select("id, panne_erreur, wo_number")
-            .eq("id", updated.resolved_via_wo_id)
-            .single()
-        );
-        updated = { ...updated, resolved_via_wo: otherRes.data || null };
-      }
+      const updated = otherWoData ? { ...res.data, resolved_via_wo: otherWoData } : res.data;
       logActivity(username, `a lié le Work Order (${workOrder.panne_erreur}) à un autre Work Order résolutif`);
       onWorkOrderUpdated(updated);
     }
@@ -183,6 +186,7 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
           maintenance_date: resolvedViaMaintenance ? maintenanceDate || null : null,
           maintenance_commentaire: resolvedViaMaintenance ? maintenanceCommentaire || null : null,
           statut: resolvedViaMaintenance ? "resolu" : workOrder.statut,
+          date_intervention: resolvedViaMaintenance ? maintenanceDate || null : workOrder.date_intervention,
         })
         .eq("id", workOrder.id)
         .select()

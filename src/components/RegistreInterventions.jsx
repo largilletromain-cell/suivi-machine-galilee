@@ -91,7 +91,18 @@ export default function RegistreInterventions({ centerId }) {
           supabase.from("interventions").select("*").eq("equipment_id", equipmentId)
         ),
       ]);
-      setWorkOrders(woRes.data ?? []);
+      let woData = woRes.data ?? [];
+      const resolvedIds = [...new Set(woData.filter((w) => w.resolved_via_wo_id).map((w) => w.resolved_via_wo_id))];
+      if (resolvedIds.length > 0) {
+        const resolvedRes = await withRetry(() =>
+          supabase.from("work_orders").select("id, commentaires").in("id", resolvedIds)
+        );
+        const byId = Object.fromEntries((resolvedRes.data ?? []).map((w) => [w.id, w]));
+        woData = woData.map((w) =>
+          w.resolved_via_wo_id ? { ...w, resolved_via_wo: byId[w.resolved_via_wo_id] || null } : w
+        );
+      }
+      setWorkOrders(woData);
       setInterventions(intRes.data ?? []);
     } catch (e) {
       setError("Erreur de chargement du registre des interventions.");
@@ -180,13 +191,18 @@ export default function RegistreInterventions({ centerId }) {
       const periods = (wo.downtime_periods ?? []).slice().sort((a, b) =>
         (a.date_debut || "").localeCompare(b.date_debut || "")
       );
+      const otherWoComment =
+        wo.resolved_via_other_wo && wo.resolved_via_wo?.commentaires
+          ? `Résolu avec un autre WO : ${wo.resolved_via_wo.commentaires}`
+          : "";
+      const commentaire = [wo.commentaires, otherWoComment].filter(Boolean).join(" — ");
       return {
         id: `wo-${wo.id}`,
         kind: "wo",
         eventType: "corrective",
         eventDate: wo.date_intervention,
         title: wo.wo_number ? `${wo.panne_erreur} (WO #${wo.wo_number})` : wo.panne_erreur,
-        commentaire: wo.commentaires,
+        commentaire,
         periods,
         raw: wo,
       };

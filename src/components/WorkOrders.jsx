@@ -495,9 +495,17 @@ function RowGroup({ row: r, periods, expanded, onToggleExpand, onUpdateField, on
         </td>
         <td style={td}>
           <input
+            key={r.date_intervention || "none"}
             type="date"
             defaultValue={r.date_intervention || ""}
-            disabled={readOnly}
+            disabled={readOnly || r.resolved_via_maintenance || r.resolved_via_other_wo}
+            title={
+              r.resolved_via_maintenance
+                ? "Verrouillé : reprend la date de la maintenance préventive"
+                : r.resolved_via_other_wo
+                ? "Verrouillé : reprend la date d'intervention de l'autre Work Order"
+                : ""
+            }
             onBlur={(e) => onUpdateField(r, "date_intervention", e.target.value || null)}
             style={{ width: 130 }}
           />
