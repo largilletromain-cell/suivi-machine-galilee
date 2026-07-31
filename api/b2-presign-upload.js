@@ -1,11 +1,11 @@
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
-const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Génère une URL PUT temporaire (15 min) permettant au navigateur d'envoyer
 // un fichier directement à Backblaze B2, sans jamais faire transiter le
 // fichier par cette fonction (évite les limites de taille de Vercel) ni
 // exposer les clés d'accès B2 au navigateur.
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Méthode non autorisée" });
     return;
@@ -43,4 +43,4 @@ module.exports = async function handler(req, res) {
     console.error("Erreur b2-presign-upload:", err);
     res.status(500).json({ error: "Impossible de générer l'URL d'upload." });
   }
-};
+}

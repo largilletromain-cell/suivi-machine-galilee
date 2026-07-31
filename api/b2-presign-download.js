@@ -1,10 +1,10 @@
-const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
-const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Génère une URL GET temporaire (10 min) permettant de consulter un document
 // privé stocké sur Backblaze B2, sans jamais exposer les clés d'accès B2 au
 // navigateur ni rendre le bucket public.
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.status(405).json({ error: "Méthode non autorisée" });
     return;
@@ -38,4 +38,4 @@ module.exports = async function handler(req, res) {
     console.error("Erreur b2-presign-download:", err);
     res.status(500).json({ error: "Impossible de générer l'URL de consultation." });
   }
-};
+}
