@@ -13,7 +13,7 @@ import {
   CartesianGrid,
   ReferenceLine,
 } from "recharts";
-import { supabase, withRetry, getOpeningHours } from "../lib/supabaseClient";
+import { supabase, withRetry } from "../lib/supabaseClient";
 import { SubTabs, Panel } from "./ui";
 import { computeMonthlyStats, CATEGORY_KEYS } from "../lib/availability";
 
@@ -68,7 +68,16 @@ export default function Statistiques({ centerId }) {
 
   useEffect(() => {
     loadMachines();
-    getOpeningHours().then(setOpeningHoursState);
+    withRetry(() => supabase.from("centers").select("opening_start, opening_end").eq("id", centerId).single()).then(
+      (res) => {
+        if (res.data) {
+          setOpeningHoursState({
+            start: (res.data.opening_start || "08:00").slice(0, 5),
+            end: (res.data.opening_end || "18:00").slice(0, 5),
+          });
+        }
+      }
+    );
   }, [centerId]);
 
   useEffect(() => {

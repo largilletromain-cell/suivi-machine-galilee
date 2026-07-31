@@ -71,6 +71,12 @@ export default function Utilisateurs({ centers, onCentersChanged }) {
     }
   }
 
+  async function updateCenterField(center, field, value) {
+    onCentersChanged(centers.map((c) => (c.id === center.id ? { ...c, [field]: value } : c)));
+    await withRetry(() => supabase.from("centers").update({ [field]: value }).eq("id", center.id));
+    logActivity(currentUsername, `a modifié le centre « ${center.name} » (champ « ${field} »)`);
+  }
+
   async function handleCreate(e) {
     e.preventDefault();
     if (!form.full_name.trim() || !form.username.trim() || !form.password.trim()) {
@@ -118,25 +124,82 @@ export default function Utilisateurs({ centers, onCentersChanged }) {
       <Panel>
         <h3 style={{ margin: "0 0 8px", fontSize: "0.95rem" }}>Centres</h3>
         <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem", marginTop: 0 }}>
-          Ce logiciel peut suivre plusieurs centres. Créez-en un nouveau ici si besoin.
+          Coordonnées et horaires d'ouverture de chaque centre. Les horaires servent à calculer
+          automatiquement la disponibilité théorique des machines dans l'onglet Statistiques.
         </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
-          {centers.map((c) => (
-            <span
-              key={c.id}
-              style={{
-                background: "var(--accent-soft)",
-                color: "var(--accent-strong)",
-                borderRadius: 999,
-                padding: "4px 12px",
-                fontSize: "0.8rem",
-                fontWeight: 600,
-              }}
-            >
-              {c.name}
-            </span>
-          ))}
-        </div>
+
+        <table>
+          <thead>
+            <tr style={{ textAlign: "left", fontSize: "0.72rem", color: "var(--ink-soft)" }}>
+              <th style={th}>Nom</th>
+              <th style={th}>Adresse</th>
+              <th style={th}>Téléphone</th>
+              <th style={th}>E-mail</th>
+              <th style={th}>Ouverture</th>
+              <th style={th}>Fermeture</th>
+            </tr>
+          </thead>
+          <tbody>
+            {centers.map((c) => (
+              <tr key={c.id} style={{ borderTop: "1px solid var(--border)" }}>
+                <td style={td}>
+                  <input
+                    type="text"
+                    defaultValue={c.name}
+                    onBlur={(e) => e.target.value.trim() && updateCenterField(c, "name", e.target.value.trim())}
+                    style={{ width: 150, fontWeight: 600 }}
+                  />
+                </td>
+                <td style={td}>
+                  <input
+                    type="text"
+                    defaultValue={c.address || ""}
+                    onBlur={(e) => updateCenterField(c, "address", e.target.value || null)}
+                    placeholder="Adresse postale"
+                    style={{ width: 220 }}
+                  />
+                </td>
+                <td style={td}>
+                  <input
+                    type="text"
+                    className="mono"
+                    defaultValue={c.phone || ""}
+                    onBlur={(e) => updateCenterField(c, "phone", e.target.value || null)}
+                    placeholder="03 20 00 00 00"
+                    style={{ width: 140 }}
+                  />
+                </td>
+                <td style={td}>
+                  <input
+                    type="email"
+                    defaultValue={c.email || ""}
+                    onBlur={(e) => updateCenterField(c, "email", e.target.value || null)}
+                    placeholder="contact@..."
+                    style={{ width: 180 }}
+                  />
+                </td>
+                <td style={td}>
+                  <input
+                    type="time"
+                    defaultValue={(c.opening_start || "08:00").slice(0, 5)}
+                    onBlur={(e) => updateCenterField(c, "opening_start", e.target.value)}
+                    style={{ width: 100 }}
+                  />
+                </td>
+                <td style={td}>
+                  <input
+                    type="time"
+                    defaultValue={(c.opening_end || "18:00").slice(0, 5)}
+                    onBlur={(e) => updateCenterField(c, "opening_end", e.target.value)}
+                    style={{ width: 100 }}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <h4 style={{ margin: "18px 0 8px", fontSize: "0.82rem", color: "var(--ink-soft)" }}>Ajouter un centre</h4>
         <form onSubmit={handleCreateCenter} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
           <Field label="Code (court, sans espace)">
             <input

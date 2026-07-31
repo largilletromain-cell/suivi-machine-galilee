@@ -12,7 +12,6 @@ import RegistreInterventions from "./components/RegistreInterventions";
 import Statistiques from "./components/Statistiques";
 import Utilisateurs from "./components/Utilisateurs";
 import Logs from "./components/Logs";
-import Parametres from "./components/Parametres";
 
 const ALL_TABS = [
   { key: "pannes", label: "Registre Pannes" },
@@ -21,7 +20,6 @@ const ALL_TABS = [
   { key: "stats", label: "Statistiques" },
   { key: "types", label: "Liste des pannes" },
   { key: "parametrage", label: "Registre du matériel" },
-  { key: "parametres", label: "Paramètres" },
   { key: "utilisateurs", label: "Utilisateurs et centres" },
   { key: "logs", label: "Logs" },
 ];
@@ -31,9 +29,9 @@ const ALL_TABS = [
 // rôles de comptes nominatifs.
 const TABS_BY_ROLE = {
   manipulateur: ["pannes", "types"],
-  visualisation: ["pannes", "wo", "interventions", "stats", "types", "parametrage", "parametres"],
-  physicien: ["pannes", "wo", "interventions", "stats", "types", "parametrage", "parametres"],
-  admin: ["pannes", "wo", "interventions", "stats", "types", "parametrage", "parametres", "utilisateurs", "logs"],
+  visualisation: ["pannes", "wo", "interventions", "stats", "types", "parametrage"],
+  physicien: ["pannes", "wo", "interventions", "stats", "types", "parametrage"],
+  admin: ["pannes", "wo", "interventions", "stats", "types", "parametrage", "utilisateurs", "logs"],
 };
 
 // Lien direct type https://votre-site.vercel.app/?vue=registre : accès
@@ -322,7 +320,6 @@ export default function App() {
               {activeTab === "parametrage" && (
                 <RegistreMateriel centerId={centerId} centers={centers} onCentersChanged={setCenters} />
               )}
-              {activeTab === "parametres" && <Parametres />}
               {activeTab === "utilisateurs" && (
                 <Utilisateurs centers={centers} onCentersChanged={setCenters} />
               )}

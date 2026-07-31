@@ -56,27 +56,6 @@ export async function setAppPassword(newPassword) {
   if (error) throw error;
 }
 
-// Horaires d'ouverture des machines, utilisés pour calculer automatiquement
-// la disponibilité théorique (onglet Statistiques) à partir du nombre de
-// jours ouvrés du mois. Réglables dans l'onglet Paramètres.
-export async function getOpeningHours() {
-  const { data } = await supabase
-    .from("app_settings")
-    .select("key, value")
-    .in("key", ["machine_opening_start", "machine_opening_end"]);
-  const byKey = Object.fromEntries((data ?? []).map((r) => [r.key, r.value]));
-  return {
-    start: byKey.machine_opening_start || "08:00",
-    end: byKey.machine_opening_end || "18:00",
-  };
-}
-
-export async function setOpeningHours(start, end) {
-  await supabase.from("app_settings").upsert([
-    { key: "machine_opening_start", value: start },
-    { key: "machine_opening_end", value: end },
-  ]);
-}
 // Échappe les caractères spéciaux d'ILIKE (% et _) pour un match exact,
 // insensible à la casse.
 function escapeForIlike(s) {
