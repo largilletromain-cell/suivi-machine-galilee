@@ -92,19 +92,17 @@ export default function PanneTypesManager() {
         style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "end" }}
       >
         <Field label="Type de machine">
-          <input
-            type="text"
-            list="machine-type-options"
+          <select
             value={newMachineType}
             onChange={(e) => setNewMachineType(e.target.value)}
-            placeholder="ex : Radixact"
             style={{ width: 150 }}
-          />
-          <datalist id="machine-type-options">
+          >
             {machineTypes.map((mt) => (
-              <option key={mt} value={mt} />
+              <option key={mt} value={mt}>
+                {mt}
+              </option>
             ))}
-          </datalist>
+          </select>
         </Field>
         <Field label="Code (optionnel)">
           <input
