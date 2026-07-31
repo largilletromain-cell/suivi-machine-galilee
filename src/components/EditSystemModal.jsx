@@ -169,7 +169,8 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
       logActivity(username, `a modifié le matériel « ${trimmedName} »`);
       onSaved({ ...system, ...payload, centerChanged });
     } catch (e) {
-      setError("Impossible d'enregistrer (nom peut-être déjà utilisé).");
+      console.error("Erreur modification matériel:", e);
+      setError(`Impossible d'enregistrer : ${e?.message || "erreur inconnue"}`);
     } finally {
       setSaving(false);
     }

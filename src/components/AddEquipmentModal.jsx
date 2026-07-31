@@ -88,7 +88,8 @@ export default function AddEquipmentModal({ centers, defaultCenterId, onClose, o
       logActivity(username, `a ajouté un matériel « ${name} » (${CATEGORY_LABELS[form.category]})`);
       onCreated();
     } catch (e) {
-      setError("Impossible de créer ce matériel (nom peut-être déjà utilisé dans ce centre).");
+      console.error("Erreur création matériel:", e);
+      setError(`Impossible de créer ce matériel : ${e?.message || "erreur inconnue"}`);
     } finally {
       setSaving(false);
     }
