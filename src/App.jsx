@@ -7,7 +7,7 @@ import GuideModal from "./components/GuideModal";
 import RegistrePannes from "./components/RegistrePannes";
 import WorkOrders from "./components/WorkOrders";
 import PanneTypesManager from "./components/PanneTypesManager";
-import Parametrage from "./components/Parametrage";
+import RegistreMateriel from "./components/RegistreMateriel";
 import RegistreInterventions from "./components/RegistreInterventions";
 import Statistiques from "./components/Statistiques";
 import Utilisateurs from "./components/Utilisateurs";
@@ -19,7 +19,7 @@ const ALL_TABS = [
   { key: "interventions", label: "Registre des Interventions" },
   { key: "stats", label: "Statistiques" },
   { key: "types", label: "Liste des pannes" },
-  { key: "parametrage", label: "Paramétrage" },
+  { key: "parametrage", label: "Registre du matériel" },
   { key: "utilisateurs", label: "Utilisateurs et centres" },
   { key: "logs", label: "Logs" },
 ];
@@ -318,7 +318,7 @@ export default function App() {
               {activeTab === "stats" && <Statistiques centerId={centerId} />}
               {activeTab === "types" && <PanneTypesManager />}
               {activeTab === "parametrage" && (
-                <Parametrage centerId={centerId} centers={centers} onCentersChanged={setCenters} />
+                <RegistreMateriel centerId={centerId} centers={centers} onCentersChanged={setCenters} />
               )}
               {activeTab === "utilisateurs" && (
                 <Utilisateurs centers={centers} onCentersChanged={setCenters} />

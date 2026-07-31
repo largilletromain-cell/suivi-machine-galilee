@@ -8,18 +8,52 @@ const MONTHS_FR = [
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
 ];
 
+const CATEGORY_LABELS = {
+  machine: "Machine",
+  logiciel: "Logiciel",
+  materiel_mesure: "Matériel de mesure",
+  fantome: "Fantôme",
+  equipement: "Équipement",
+};
+
 const emptyHoursForm = () => ({
   year: new Date().getFullYear(),
   month: new Date().getMonth() + 1,
   hours: "",
 });
 
+const emptyVersionForm = () => ({ version_date: "", version_label: "", commentaire: "" });
+const emptyCalibrationForm = () => ({ calibration_date: "", commentaire: "" });
+
+function formatDate(iso) {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function addMonths(iso, months) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y, m - 1 + months, d);
+  return date.toISOString().slice(0, 10);
+}
+
 export default function EditSystemModal({ system, centers, onClose, onSaved }) {
   const { username } = useAccess();
+  const category = system.category || "machine";
+  const isMachine = category === "machine";
+  const isLogiciel = category === "logiciel";
+  const isMesure = category === "materiel_mesure";
+
   const [name, setName] = useState(system.name);
+  const [manufacturer, setManufacturer] = useState(system.manufacturer || "");
   const [serialNumber, setSerialNumber] = useState(system.serial_number || "");
   const [commissioningDate, setCommissioningDate] = useState(system.commissioning_date || "");
+  const [notes, setNotes] = useState(system.notes || "");
   const [centerId, setCenterId] = useState(system.center_id);
+  const [asnrDate, setAsnrDate] = useState(system.asnr_renewal_date || "");
+  const [externalQcDate, setExternalQcDate] = useState(system.next_external_qc_date || "");
+  const [equalEstroDate, setEqualEstroDate] = useState(system.next_equal_estro_date || "");
+  const [calibrationInterval, setCalibrationInterval] = useState(system.calibration_interval_months || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -29,8 +63,20 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
   const [hoursForm, setHoursForm] = useState(emptyHoursForm);
   const [hoursError, setHoursError] = useState("");
 
+  const [versions, setVersions] = useState([]);
+  const [loadingVersions, setLoadingVersions] = useState(true);
+  const [versionForm, setVersionForm] = useState(emptyVersionForm);
+  const [versionError, setVersionError] = useState("");
+
+  const [calibrations, setCalibrations] = useState([]);
+  const [loadingCalibrations, setLoadingCalibrations] = useState(true);
+  const [calibrationForm, setCalibrationForm] = useState(emptyCalibrationForm);
+  const [calibrationError, setCalibrationError] = useState("");
+
   useEffect(() => {
-    loadHours();
+    if (isMachine) loadHours();
+    if (isMachine || isLogiciel) loadVersions();
+    if (isMesure) loadCalibrations();
   }, []);
 
   async function loadHours() {
@@ -47,6 +93,32 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
     setLoadingHours(false);
   }
 
+  async function loadVersions() {
+    setLoadingVersions(true);
+    const res = await withRetry(() =>
+      supabase
+        .from("equipment_versions")
+        .select("*")
+        .eq("system_id", system.id)
+        .order("version_date", { ascending: false })
+    );
+    setVersions(res.data ?? []);
+    setLoadingVersions(false);
+  }
+
+  async function loadCalibrations() {
+    setLoadingCalibrations(true);
+    const res = await withRetry(() =>
+      supabase
+        .from("equipment_calibrations")
+        .select("*")
+        .eq("system_id", system.id)
+        .order("calibration_date", { ascending: false })
+    );
+    setCalibrations(res.data ?? []);
+    setLoadingCalibrations(false);
+  }
+
   async function handleSaveGeneral(e) {
     e.preventDefault();
     if (!name.trim()) {
@@ -58,17 +130,23 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
     try {
       const trimmedName = name.trim();
       const centerChanged = centerId !== system.center_id;
-      await withRetry(() =>
-        supabase
-          .from("systems")
-          .update({
-            name: trimmedName,
-            serial_number: serialNumber || null,
-            commissioning_date: commissioningDate || null,
-            center_id: centerId,
-          })
-          .eq("id", system.id)
-      );
+      const payload = {
+        name: trimmedName,
+        manufacturer: manufacturer || null,
+        serial_number: serialNumber || null,
+        commissioning_date: commissioningDate || null,
+        notes: notes || null,
+        center_id: centerId,
+      };
+      if (isMachine) {
+        payload.asnr_renewal_date = asnrDate || null;
+        payload.next_external_qc_date = externalQcDate || null;
+        payload.next_equal_estro_date = equalEstroDate || null;
+      }
+      if (isMesure) {
+        payload.calibration_interval_months = calibrationInterval ? Number(calibrationInterval) : null;
+      }
+      await withRetry(() => supabase.from("systems").update(payload).eq("id", system.id));
       // Garder les sous-onglets Registre Pannes / Work Order synchronisés
       // avec le nom et le centre si l'un des deux a changé.
       if (system.machine_id) {
@@ -88,15 +166,8 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
         );
       }
       setSaved(true);
-      logActivity(username, `a modifié le système « ${trimmedName} »`);
-      onSaved({
-        ...system,
-        name: trimmedName,
-        serial_number: serialNumber || null,
-        commissioning_date: commissioningDate || null,
-        center_id: centerId,
-        centerChanged,
-      });
+      logActivity(username, `a modifié le matériel « ${trimmedName} »`);
+      onSaved({ ...system, ...payload, centerChanged });
     } catch (e) {
       setError("Impossible d'enregistrer (nom peut-être déjà utilisé).");
     } finally {
@@ -137,6 +208,70 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
     setHoursEntries((h) => h.filter((x) => x.id !== id));
   }
 
+  async function handleAddVersion(e) {
+    e.preventDefault();
+    if (!versionForm.version_date || !versionForm.version_label.trim()) {
+      setVersionError("La date et le numéro de version sont obligatoires.");
+      return;
+    }
+    setVersionError("");
+    try {
+      await withRetry(() =>
+        supabase.from("equipment_versions").insert({
+          system_id: system.id,
+          version_date: versionForm.version_date,
+          version_label: versionForm.version_label.trim(),
+          commentaire: versionForm.commentaire || null,
+        })
+      );
+      setVersionForm(emptyVersionForm());
+      logActivity(username, `a ajouté une version de « ${system.name} » (${versionForm.version_label.trim()})`);
+      loadVersions();
+    } catch (e) {
+      setVersionError("Impossible d'enregistrer cette version.");
+    }
+  }
+
+  async function handleDeleteVersion(id) {
+    await withRetry(() => supabase.from("equipment_versions").delete().eq("id", id));
+    logActivity(username, `a supprimé une version de « ${system.name} »`);
+    setVersions((v) => v.filter((x) => x.id !== id));
+  }
+
+  async function handleAddCalibration(e) {
+    e.preventDefault();
+    if (!calibrationForm.calibration_date) {
+      setCalibrationError("La date d'étalonnage est obligatoire.");
+      return;
+    }
+    setCalibrationError("");
+    try {
+      await withRetry(() =>
+        supabase.from("equipment_calibrations").insert({
+          system_id: system.id,
+          calibration_date: calibrationForm.calibration_date,
+          commentaire: calibrationForm.commentaire || null,
+        })
+      );
+      setCalibrationForm(emptyCalibrationForm());
+      logActivity(username, `a ajouté un étalonnage de « ${system.name} »`);
+      loadCalibrations();
+    } catch (e) {
+      setCalibrationError("Impossible d'enregistrer cet étalonnage.");
+    }
+  }
+
+  async function handleDeleteCalibration(id) {
+    await withRetry(() => supabase.from("equipment_calibrations").delete().eq("id", id));
+    logActivity(username, `a supprimé un étalonnage de « ${system.name} »`);
+    setCalibrations((c) => c.filter((x) => x.id !== id));
+  }
+
+  const nextCalibrationDate =
+    isMesure && calibrations.length > 0 && calibrationInterval
+      ? addMonths(calibrations[0].calibration_date, Number(calibrationInterval))
+      : null;
+
   return (
     <div
       onClick={onClose}
@@ -157,7 +292,7 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
           background: "var(--surface)",
           borderRadius: 12,
           padding: 22,
-          width: 620,
+          width: 640,
           maxWidth: "100%",
           maxHeight: "85vh",
           overflowY: "auto",
@@ -174,11 +309,23 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
         </div>
 
         <form onSubmit={handleSaveGeneral} style={{ marginTop: 16 }}>
-          <FieldLabel>Nom</FieldLabel>
+          <FieldLabel>
+            Catégorie — <span style={{ fontWeight: 400 }}>{CATEGORY_LABELS[category]} (fixe, non modifiable)</span>
+          </FieldLabel>
+
+          <FieldLabel>Nom du matériel</FieldLabel>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            style={{ width: "100%", marginBottom: 10 }}
+          />
+
+          <FieldLabel>Constructeur</FieldLabel>
+          <input
+            type="text"
+            value={manufacturer}
+            onChange={(e) => setManufacturer(e.target.value)}
             style={{ width: "100%", marginBottom: 10 }}
           />
 
@@ -195,13 +342,17 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
             ))}
           </select>
 
-          <FieldLabel>
-            Type — <span style={{ fontWeight: 400 }}>{system.system_type} (fixe, non modifiable)</span>
-          </FieldLabel>
-          <p style={{ fontSize: "0.72rem", color: "var(--ink-soft)", margin: "0 0 10px" }}>
-            Changer le type impliquerait de créer/supprimer les sous-onglets associés et l'historique
-            qui va avec — supprimez et recréez le système si le type est réellement à changer.
-          </p>
+          {isMachine && (
+            <>
+              <FieldLabel>
+                Type — <span style={{ fontWeight: 400 }}>{system.system_type} (fixe, non modifiable)</span>
+              </FieldLabel>
+              <p style={{ fontSize: "0.72rem", color: "var(--ink-soft)", margin: "0 0 10px" }}>
+                Changer le type impliquerait de créer/supprimer les sous-onglets associés et l'historique
+                qui va avec — supprimez et recréez le système si le type est réellement à changer.
+              </p>
+            </>
+          )}
 
           <FieldLabel>N° de série</FieldLabel>
           <input
@@ -218,6 +369,75 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
             value={commissioningDate}
             onChange={(e) => setCommissioningDate(e.target.value)}
             style={{ marginBottom: 10 }}
+          />
+
+          {isMachine && (
+            <div
+              style={{
+                background: "var(--paper)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                padding: 12,
+                marginBottom: 10,
+              }}
+            >
+              <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8 }}>Échéances de la machine</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                <MiniField label="Renouvellement autorisation ASNR">
+                  <input type="date" value={asnrDate} onChange={(e) => setAsnrDate(e.target.value)} style={{ width: "100%" }} />
+                </MiniField>
+                <MiniField label="Prochain contrôle qualité externe">
+                  <input
+                    type="date"
+                    value={externalQcDate}
+                    onChange={(e) => setExternalQcDate(e.target.value)}
+                    style={{ width: "100%" }}
+                  />
+                </MiniField>
+                <MiniField label="Prochain EQUAL ESTRO">
+                  <input
+                    type="date"
+                    value={equalEstroDate}
+                    onChange={(e) => setEqualEstroDate(e.target.value)}
+                    style={{ width: "100%" }}
+                  />
+                </MiniField>
+              </div>
+            </div>
+          )}
+
+          {isMesure && (
+            <div
+              style={{
+                background: "var(--paper)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                padding: 12,
+                marginBottom: 10,
+              }}
+            >
+              <MiniField label="Fréquence d'étalonnage (en mois, ex : 24 pour tous les 2 ans)">
+                <input
+                  type="number"
+                  value={calibrationInterval}
+                  onChange={(e) => setCalibrationInterval(e.target.value)}
+                  style={{ width: 140 }}
+                />
+              </MiniField>
+              {nextCalibrationDate && (
+                <p style={{ fontSize: "0.78rem", margin: "8px 0 0", color: "var(--accent-strong)", fontWeight: 600 }}>
+                  Prochain étalonnage : {formatDate(nextCalibrationDate)}
+                </p>
+              )}
+            </div>
+          )}
+
+          <FieldLabel>Commentaire</FieldLabel>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            style={{ width: "100%", marginBottom: 10, resize: "vertical" }}
           />
 
           {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem" }}>{error}</p>}
@@ -242,91 +462,246 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
           </button>
         </form>
 
-        <h4 style={{ margin: "22px 0 6px", fontSize: "0.85rem", color: "var(--ink-soft)" }}>
-          Temps de disponibilité théorique (heures / mois)
-        </h4>
-        <p style={{ fontSize: "0.75rem", color: "var(--ink-soft)", margin: "0 0 10px" }}>
-          Utilisé pour de futurs calculs de taux de disponibilité (temps théorique comparé au temps
-          d'immobilisation réel des Work Orders).
-        </p>
-
-        <form
-          onSubmit={handleAddHours}
-          style={{ display: "grid", gridTemplateColumns: "100px 140px 120px auto", gap: 6, marginBottom: 12 }}
-        >
-          <MiniField label="Année">
-            <input
-              type="number"
-              value={hoursForm.year}
-              onChange={(e) => setHoursForm({ ...hoursForm, year: e.target.value })}
-              style={{ width: "100%" }}
-            />
-          </MiniField>
-          <MiniField label="Mois">
-            <select
-              value={hoursForm.month}
-              onChange={(e) => setHoursForm({ ...hoursForm, month: e.target.value })}
-              style={{ width: "100%" }}
+        {(isMachine || isLogiciel) && (
+          <>
+            <h4 style={{ margin: "22px 0 6px", fontSize: "0.85rem", color: "var(--ink-soft)" }}>
+              Historique des mises à jour / versions
+            </h4>
+            <form
+              onSubmit={handleAddVersion}
+              style={{ display: "grid", gridTemplateColumns: "140px 1fr 1fr auto", gap: 6, marginBottom: 8 }}
             >
-              {MONTHS_FR.map((m, i) => (
-                <option key={m} value={i + 1}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </MiniField>
-          <MiniField label="Heures">
-            <input
-              type="number"
-              step="0.1"
-              value={hoursForm.hours}
-              onChange={(e) => setHoursForm({ ...hoursForm, hours: e.target.value })}
-              placeholder="ex : 720"
-              style={{ width: "100%" }}
-            />
-          </MiniField>
-          <button
-            type="submit"
-            style={{
-              alignSelf: "end",
-              background: "var(--accent)",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              padding: "6px 14px",
-              fontSize: "0.8rem",
-              height: 32,
-            }}
-          >
-            + Ajouter
-          </button>
-        </form>
-        {hoursError && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem" }}>{hoursError}</p>}
+              <MiniField label="Date">
+                <input
+                  type="date"
+                  value={versionForm.version_date}
+                  onChange={(e) => setVersionForm({ ...versionForm, version_date: e.target.value })}
+                  style={{ width: "100%" }}
+                />
+              </MiniField>
+              <MiniField label="Version">
+                <input
+                  type="text"
+                  value={versionForm.version_label}
+                  onChange={(e) => setVersionForm({ ...versionForm, version_label: e.target.value })}
+                  placeholder="ex : 6.2.1"
+                  style={{ width: "100%" }}
+                />
+              </MiniField>
+              <MiniField label="Commentaire">
+                <input
+                  type="text"
+                  value={versionForm.commentaire}
+                  onChange={(e) => setVersionForm({ ...versionForm, commentaire: e.target.value })}
+                  style={{ width: "100%" }}
+                />
+              </MiniField>
+              <button
+                type="submit"
+                style={{
+                  alignSelf: "end",
+                  background: "var(--accent)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "6px 14px",
+                  fontSize: "0.8rem",
+                  height: 32,
+                }}
+              >
+                + Ajouter
+              </button>
+            </form>
+            {versionError && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem" }}>{versionError}</p>}
 
-        {loadingHours ? (
-          <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Chargement…</p>
-        ) : hoursEntries.length === 0 ? (
-          <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Aucune heure théorique enregistrée.</p>
-        ) : (
-          <table>
-            <tbody>
-              {hoursEntries.map((h) => (
-                <tr key={h.id} style={{ borderTop: "1px solid var(--border)" }}>
-                  <td style={{ padding: "6px 8px", fontSize: "0.85rem" }}>
-                    {MONTHS_FR[h.month - 1]} {h.year}
-                  </td>
-                  <td style={{ padding: "6px 8px", fontSize: "0.85rem" }} className="mono">
-                    {h.hours} h
-                  </td>
-                  <td style={{ padding: "6px 8px" }}>
-                    <IconButton title="Supprimer" danger onClick={() => handleDeleteHours(h.id)}>
-                      ✕
-                    </IconButton>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            {loadingVersions ? (
+              <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Chargement…</p>
+            ) : versions.length === 0 ? (
+              <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Aucune version enregistrée.</p>
+            ) : (
+              <table>
+                <tbody>
+                  {versions.map((v) => (
+                    <tr key={v.id} style={{ borderTop: "1px solid var(--border)" }}>
+                      <td style={{ padding: "6px 8px", fontSize: "0.85rem" }} className="mono">
+                        {formatDate(v.version_date)}
+                      </td>
+                      <td style={{ padding: "6px 8px", fontSize: "0.85rem", fontWeight: 600 }}>{v.version_label}</td>
+                      <td style={{ padding: "6px 8px", fontSize: "0.8rem", color: "var(--ink-soft)" }}>
+                        {v.commentaire || ""}
+                      </td>
+                      <td style={{ padding: "6px 8px" }}>
+                        <IconButton title="Supprimer" danger onClick={() => handleDeleteVersion(v.id)}>
+                          ✕
+                        </IconButton>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+
+        {isMesure && (
+          <>
+            <h4 style={{ margin: "22px 0 6px", fontSize: "0.85rem", color: "var(--ink-soft)" }}>
+              Historique d'étalonnage
+            </h4>
+            <form
+              onSubmit={handleAddCalibration}
+              style={{ display: "grid", gridTemplateColumns: "140px 1fr auto", gap: 6, marginBottom: 8 }}
+            >
+              <MiniField label="Date d'étalonnage">
+                <input
+                  type="date"
+                  value={calibrationForm.calibration_date}
+                  onChange={(e) => setCalibrationForm({ ...calibrationForm, calibration_date: e.target.value })}
+                  style={{ width: "100%" }}
+                />
+              </MiniField>
+              <MiniField label="Commentaire">
+                <input
+                  type="text"
+                  value={calibrationForm.commentaire}
+                  onChange={(e) => setCalibrationForm({ ...calibrationForm, commentaire: e.target.value })}
+                  style={{ width: "100%" }}
+                />
+              </MiniField>
+              <button
+                type="submit"
+                style={{
+                  alignSelf: "end",
+                  background: "var(--accent)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "6px 14px",
+                  fontSize: "0.8rem",
+                  height: 32,
+                }}
+              >
+                + Ajouter
+              </button>
+            </form>
+            {calibrationError && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem" }}>{calibrationError}</p>}
+
+            {loadingCalibrations ? (
+              <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Chargement…</p>
+            ) : calibrations.length === 0 ? (
+              <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Aucun étalonnage enregistré.</p>
+            ) : (
+              <table>
+                <tbody>
+                  {calibrations.map((c) => (
+                    <tr key={c.id} style={{ borderTop: "1px solid var(--border)" }}>
+                      <td style={{ padding: "6px 8px", fontSize: "0.85rem" }} className="mono">
+                        {formatDate(c.calibration_date)}
+                      </td>
+                      <td style={{ padding: "6px 8px", fontSize: "0.8rem", color: "var(--ink-soft)" }}>
+                        {c.commentaire || ""}
+                      </td>
+                      <td style={{ padding: "6px 8px" }}>
+                        <IconButton title="Supprimer" danger onClick={() => handleDeleteCalibration(c.id)}>
+                          ✕
+                        </IconButton>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+
+        {isMachine && (
+          <>
+            <h4 style={{ margin: "22px 0 6px", fontSize: "0.85rem", color: "var(--ink-soft)" }}>
+              Temps de disponibilité théorique (heures / mois)
+            </h4>
+            <p style={{ fontSize: "0.75rem", color: "var(--ink-soft)", margin: "0 0 10px" }}>
+              Utilisé pour les calculs de taux de disponibilité de l'onglet Statistiques.
+            </p>
+
+            <form
+              onSubmit={handleAddHours}
+              style={{ display: "grid", gridTemplateColumns: "100px 140px 120px auto", gap: 6, marginBottom: 12 }}
+            >
+              <MiniField label="Année">
+                <input
+                  type="number"
+                  value={hoursForm.year}
+                  onChange={(e) => setHoursForm({ ...hoursForm, year: e.target.value })}
+                  style={{ width: "100%" }}
+                />
+              </MiniField>
+              <MiniField label="Mois">
+                <select
+                  value={hoursForm.month}
+                  onChange={(e) => setHoursForm({ ...hoursForm, month: e.target.value })}
+                  style={{ width: "100%" }}
+                >
+                  {MONTHS_FR.map((m, i) => (
+                    <option key={m} value={i + 1}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </MiniField>
+              <MiniField label="Heures">
+                <input
+                  type="number"
+                  step="0.1"
+                  value={hoursForm.hours}
+                  onChange={(e) => setHoursForm({ ...hoursForm, hours: e.target.value })}
+                  placeholder="ex : 720"
+                  style={{ width: "100%" }}
+                />
+              </MiniField>
+              <button
+                type="submit"
+                style={{
+                  alignSelf: "end",
+                  background: "var(--accent)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "6px 14px",
+                  fontSize: "0.8rem",
+                  height: 32,
+                }}
+              >
+                + Ajouter
+              </button>
+            </form>
+            {hoursError && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem" }}>{hoursError}</p>}
+
+            {loadingHours ? (
+              <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Chargement…</p>
+            ) : hoursEntries.length === 0 ? (
+              <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Aucune heure théorique enregistrée.</p>
+            ) : (
+              <table>
+                <tbody>
+                  {hoursEntries.map((h) => (
+                    <tr key={h.id} style={{ borderTop: "1px solid var(--border)" }}>
+                      <td style={{ padding: "6px 8px", fontSize: "0.85rem" }}>
+                        {MONTHS_FR[h.month - 1]} {h.year}
+                      </td>
+                      <td style={{ padding: "6px 8px", fontSize: "0.85rem" }} className="mono">
+                        {h.hours} h
+                      </td>
+                      <td style={{ padding: "6px 8px" }}>
+                        <IconButton title="Supprimer" danger onClick={() => handleDeleteHours(h.id)}>
+                          ✕
+                        </IconButton>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
         )}
       </div>
     </div>

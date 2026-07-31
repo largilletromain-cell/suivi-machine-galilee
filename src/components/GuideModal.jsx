@@ -101,7 +101,7 @@ export default function GuideModal({ onClose }) {
             <li>Histogramme de projection : 2 derniers mois, mois en cours, 3 prochains mois.</li>
             <li>Graphique d'évolution sur 12 mois glissants (WO ouverts / pannes signalées).</li>
             <li>Bouton <strong>📄 Générer le rapport PDF</strong> pour exporter tout ça en un document à transmettre.</li>
-            <li>Nécessite d'avoir saisi une disponibilité théorique par mois dans Paramétrage.</li>
+            <li>Nécessite d'avoir saisi une disponibilité théorique par mois dans Registre du matériel.</li>
           </ul>
         </Section>
 
@@ -113,20 +113,30 @@ export default function GuideModal({ onClose }) {
           </ul>
         </Section>
 
-        <Section title="Paramétrage">
+        <Section title="Registre du matériel">
           <ul style={ulStyle}>
-            <li>Créez ici les centres et chaque machine/logiciel à suivre.</li>
+            <li>
+              Bouton <strong>+ Ajouter un équipement</strong> : machine, logiciel, matériel de mesure,
+              fantôme ou équipement — chaque catégorie a ses propres informations à suivre.
+            </li>
             <li>
               Un sous-onglet Work Order est toujours créé automatiquement ; un sous-onglet Registre
-              Pannes en plus si le type est Radixact ou Varian.
+              Pannes en plus si c'est une machine Radixact ou Varian.
             </li>
-            <li>Bouton <strong>✎ Modifier</strong> pour changer le nom, le centre, le n° de série, la date de mise en service, et saisir la disponibilité théorique mensuelle (nécessaire pour l'onglet Statistiques).</li>
-            <li>La suppression d'un système efface aussi définitivement tout son historique de pannes/Work Orders.</li>
+            <li>Les entrées sont regroupées par catégorie, en sous-groupes repliables.</li>
+            <li>
+              Bouton <strong>✎ Modifier</strong> pour changer le nom, le constructeur, le centre, le n°
+              de série, la date de mise en service, et selon la catégorie : les échéances de la machine
+              (ASNR, contrôle qualité externe, EQUAL ESTRO), l'historique des versions (machine/logiciel),
+              la fréquence d'étalonnage (matériel de mesure), ou la disponibilité théorique mensuelle.
+            </li>
+            <li>La suppression d'un matériel efface aussi définitivement tout son historique de pannes/Work Orders.</li>
           </ul>
         </Section>
 
-        <Section title="Utilisateurs (Admin uniquement)">
+        <Section title="Utilisateurs et centres (Admin uniquement)">
           <ul style={ulStyle}>
+            <li>Créez ici les centres (code + nom affiché).</li>
             <li>Bouton <strong>+ Ajouter un utilisateur</strong> : nom, identifiant, mot de passe, rôle, centre (ou « Tous les centres »).</li>
             <li>Modifiable directement dans le tableau (mot de passe, rôle, centre).</li>
           </ul>
