@@ -398,12 +398,12 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
             </button>
           </div>
           <MiniField label="Commentaire sur cette immobilisation (optionnel)">
-            <input
-              type="text"
+            <textarea
               value={form.commentaire}
               onChange={(e) => setForm({ ...form, commentaire: e.target.value })}
               placeholder="ex : remplacement carte contrôleur, attente pièce…"
-              style={{ width: "100%" }}
+              rows={3}
+              style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: "inherit" }}
             />
           </MiniField>
         </form>
@@ -463,11 +463,11 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
                     </MiniField>
                   </div>
                   <MiniField label="Commentaire">
-                    <input
-                      type="text"
+                    <textarea
                       value={editForm.commentaire}
                       onChange={(e) => setEditForm({ ...editForm, commentaire: e.target.value })}
-                      style={{ width: "100%" }}
+                      rows={3}
+                      style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: "inherit" }}
                     />
                   </MiniField>
                   <div style={{ display: "flex", gap: 8, marginTop: 8 }}>

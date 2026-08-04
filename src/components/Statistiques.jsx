@@ -112,7 +112,7 @@ export default function Statistiques({ centerId }) {
           ? withRetry(() => supabase.from("interventions").select("*").eq("equipment_id", equipmentId))
           : Promise.resolve({ data: [] }),
         machineId
-          ? withRetry(() => supabase.from("pannes").select("id, date_panne").eq("machine_id", machineId))
+          ? withRetry(() => supabase.from("pannes").select("id, date_panne, redemarrage").eq("machine_id", machineId))
           : Promise.resolve({ data: [] }),
       ]);
 
@@ -272,7 +272,8 @@ export default function Statistiques({ centerId }) {
       const prefix = `${year}-${String(month).padStart(2, "0")}`;
       const woCount = workOrders.filter((wo) => wo.date_decouverte?.startsWith(prefix)).length;
       const panneCount = pannes.filter((p) => p.date_panne?.startsWith(prefix)).length;
-      return { label: monthLabel(year, month), wo: woCount, pannes: panneCount };
+      const redemarrageCount = pannes.filter((p) => p.date_panne?.startsWith(prefix) && p.redemarrage).length;
+      return { label: monthLabel(year, month), wo: woCount, pannes: panneCount, redemarrages: redemarrageCount };
     });
   }, [workOrders, pannes]);
 
@@ -523,7 +524,7 @@ export default function Statistiques({ centerId }) {
 
               <Panel>
                 <h3 style={{ margin: "0 0 10px", fontSize: "0.9rem" }}>
-                  Évolution sur 12 mois glissants — WO ouverts / pannes signalées
+                  Évolution sur 12 mois glissants — WO ouverts / pannes signalées / redémarrages
                 </h3>
                 <ResponsiveContainer width={620} height={340}>
                   <BarChart data={trend12Months}>
@@ -534,6 +535,7 @@ export default function Statistiques({ centerId }) {
                     <Legend wrapperStyle={{ fontSize: "0.72rem" }} />
                     <Bar dataKey="wo" fill={BRAND.blue} name="WO ouverts" />
                     <Bar dataKey="pannes" fill={EVENT_STYLES.corrective.color} name="Pannes signalées" />
+                    <Bar dataKey="redemarrages" fill="#f0b429" name="Redémarrages machine" />
                     <ReferenceLine
                       y={avgPannesPerMonth}
                       stroke="red"

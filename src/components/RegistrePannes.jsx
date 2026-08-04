@@ -34,6 +34,7 @@ function defaultForm() {
     heure_fin: "",
     panne_type_id: "",
     commentaire: "",
+    redemarrage: false,
   };
 }
 
@@ -192,6 +193,7 @@ export default function RegistrePannes({ centerId }) {
           heure_fin: form.heure_fin,
           panne_type_id: form.panne_type_id,
           commentaire: form.commentaire || null,
+          redemarrage: form.redemarrage,
         })
       );
       const monthKey = form.date_panne.slice(0, 7);
@@ -243,7 +245,7 @@ export default function RegistrePannes({ centerId }) {
           onSubmit={handleAdd}
           style={{
             display: "grid",
-            gridTemplateColumns: "130px 110px 110px 1fr 1fr auto",
+            gridTemplateColumns: "130px 110px 110px 1fr 150px 1fr auto",
             gap: 8,
             alignItems: "end",
             marginBottom: 18,
@@ -290,6 +292,25 @@ export default function RegistrePannes({ centerId }) {
                 </option>
               ))}
             </select>
+          </Field>
+          <Field label="Redémarrage machine">
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, redemarrage: !form.redemarrage })}
+              style={{
+                width: "100%",
+                border: "1px solid " + (form.redemarrage ? "var(--accent)" : "var(--border)"),
+                background: form.redemarrage ? "var(--accent-soft)" : "var(--surface)",
+                color: form.redemarrage ? "var(--accent-strong)" : "var(--ink)",
+                borderRadius: 6,
+                padding: "7px 0",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                height: 34,
+              }}
+            >
+              {form.redemarrage ? "🔄 Redémarrée" : "Pas redémarrée"}
+            </button>
           </Field>
           <Field label="Commentaire">
             <input
@@ -428,6 +449,7 @@ function PannesTable({ rows, panneTypes, onUpdateField, onDelete, readOnly }) {
           <th style={th}>Début</th>
           <th style={th}>Fin</th>
           <th style={th}>Erreur</th>
+          <th style={th}>Redémarrage</th>
           <th style={th}>Commentaire</th>
           <th style={th}></th>
         </tr>
@@ -513,6 +535,26 @@ function PannesTable({ rows, panneTypes, onUpdateField, onDelete, readOnly }) {
                     </option>
                   ))}
                 </select>
+              </td>
+              <td style={td}>
+                <button
+                  disabled={readOnly}
+                  onClick={() => onUpdateField(r, "redemarrage", !r.redemarrage)}
+                  title={readOnly ? "" : "Cliquer pour basculer"}
+                  style={{
+                    border: "1px solid " + (r.redemarrage ? "var(--accent)" : "var(--border)"),
+                    background: r.redemarrage ? "var(--accent-soft)" : "var(--surface)",
+                    color: r.redemarrage ? "var(--accent-strong)" : "var(--ink-soft)",
+                    borderRadius: 6,
+                    padding: "4px 8px",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    whiteSpace: "nowrap",
+                    cursor: readOnly ? "default" : "pointer",
+                  }}
+                >
+                  {r.redemarrage ? "🔄 Oui" : "Non"}
+                </button>
               </td>
               <td style={td}>
                 <input
