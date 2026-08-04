@@ -9,11 +9,15 @@ const GROUP_LABELS = {
 };
 
 export function SubTabs({ items, activeKey, onChange }) {
-  const [collapsed, setCollapsed] = useState(() => new Set());
+  const [collapsed, setCollapsed] = useState(
+    () => new Set(["logiciel", "materiel_mesure", "fantome", "equipement"])
+  );
 
   // Regroupe les items en conservant l'ordre d'apparition (déjà trié par
   // l'appelant, machines en premier). Le groupe "machine" reste toujours
-  // visible ; les autres groupes sont repliables.
+  // visible ; les autres groupes sont repliables, y compris quand l'onglet
+  // actif s'y trouve (replier ne change pas l'onglet affiché, juste sa
+  // visibilité dans la barre).
   const groups = [];
   for (const it of items) {
     const g = it.group || "machine";
@@ -39,7 +43,8 @@ export function SubTabs({ items, activeKey, onChange }) {
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         {groups.map((group, gi) => {
           const canCollapse = group.key !== "machine";
-          const isCollapsed = canCollapse && collapsed.has(group.key) && !group.items.some((it) => it.key === activeKey);
+          const isCollapsed = canCollapse && collapsed.has(group.key);
+          const hasActive = group.items.some((it) => it.key === activeKey);
           return (
             <div key={group.key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
               {gi > 0 && <span style={{ width: 1, height: 20, background: "var(--border)" }} />}
@@ -49,7 +54,7 @@ export function SubTabs({ items, activeKey, onChange }) {
                   style={{
                     border: "none",
                     background: "transparent",
-                    color: "var(--ink-soft)",
+                    color: hasActive ? "var(--accent-strong)" : "var(--ink-soft)",
                     fontSize: "0.72rem",
                     fontWeight: 700,
                     cursor: "pointer",
@@ -59,6 +64,7 @@ export function SubTabs({ items, activeKey, onChange }) {
                   title={isCollapsed ? `Afficher ${group.label}` : `Réduire ${group.label}`}
                 >
                   {isCollapsed ? "▸" : "▾"} {group.label}
+                  {isCollapsed && hasActive ? " •" : ""}
                 </button>
               )}
               {(!canCollapse || !isCollapsed) &&
