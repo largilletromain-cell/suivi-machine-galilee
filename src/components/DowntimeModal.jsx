@@ -3,7 +3,14 @@ import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
 import { IconButton } from "./ui";
 import { useAccess } from "../lib/access";
 
-const emptyPeriod = { date_debut: "", heure_debut: "", date_fin: "", heure_fin: "", commentaire: "" };
+const emptyPeriod = {
+  date_debut: "",
+  heure_debut: "",
+  date_fin: "",
+  heure_fin: "",
+  commentaire: "",
+  technicien: "",
+};
 
 export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, onPeriodsChanged }) {
   const { username } = useAccess();
@@ -70,6 +77,7 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
         date_fin: form.date_fin || null,
         heure_fin: form.heure_fin || null,
         commentaire: form.commentaire || null,
+        technicien: form.technicien || null,
       })
     );
     setForm(emptyPeriod);
@@ -94,6 +102,7 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
       date_fin: p.date_fin || "",
       heure_fin: p.heure_fin?.slice(0, 5) || "",
       commentaire: p.commentaire || "",
+      technicien: p.technicien || "",
     });
   }
 
@@ -112,6 +121,7 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
           date_fin: editForm.date_fin || null,
           heure_fin: editForm.heure_fin || null,
           commentaire: editForm.commentaire || null,
+          technicien: editForm.technicien || null,
         })
         .eq("id", id)
         .select()
@@ -406,6 +416,17 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
               style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: "inherit" }}
             />
           </MiniField>
+          <div style={{ marginTop: 8 }}>
+            <MiniField label="Technicien intervenu (optionnel)">
+              <input
+                type="text"
+                value={form.technicien}
+                onChange={(e) => setForm({ ...form, technicien: e.target.value })}
+                placeholder="ex : Jean Dupont (Varian)"
+                style={{ width: "100%" }}
+              />
+            </MiniField>
+          </div>
         </form>
         {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem" }}>{error}</p>}
 
@@ -470,6 +491,16 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
                       style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: "inherit" }}
                     />
                   </MiniField>
+                  <div style={{ marginTop: 6 }}>
+                    <MiniField label="Technicien intervenu">
+                      <input
+                        type="text"
+                        value={editForm.technicien}
+                        onChange={(e) => setEditForm({ ...editForm, technicien: e.target.value })}
+                        style={{ width: "100%" }}
+                      />
+                    </MiniField>
+                  </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                     <button
                       onClick={() => saveEdit(p.id)}
@@ -517,6 +548,11 @@ export default function DowntimeModal({ workOrder, onClose, onWorkOrderUpdated, 
                       {" → "}
                       {p.date_fin ? `${formatDate(p.date_fin)} ${p.heure_fin?.slice(0, 5) || ""}` : "en cours"}
                     </div>
+                    {p.technicien && (
+                      <div style={{ fontSize: "0.78rem", color: "var(--accent-strong)", marginTop: 2 }}>
+                        👤 {p.technicien}
+                      </div>
+                    )}
                     {p.commentaire && (
                       <div style={{ display: "flex", alignItems: "start", gap: 6, marginTop: 2 }}>
                         <div style={{ color: "var(--ink-soft)", fontSize: "0.78rem" }}>{p.commentaire}</div>

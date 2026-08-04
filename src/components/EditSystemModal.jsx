@@ -63,9 +63,15 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
   const [calibrationForm, setCalibrationForm] = useState(emptyCalibrationForm);
   const [calibrationError, setCalibrationError] = useState("");
 
+  const [qcList, setQcList] = useState([]);
+  const [loadingQc, setLoadingQc] = useState(true);
+  const [newQcName, setNewQcName] = useState("");
+  const [qcError, setQcError] = useState("");
+
   useEffect(() => {
     if (isMachine || isLogiciel) loadVersions();
     if (isMesure) loadCalibrations();
+    if (isMachine) loadQcList();
   }, []);
 
   async function loadVersions() {
@@ -92,6 +98,40 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
     );
     setCalibrations(res.data ?? []);
     setLoadingCalibrations(false);
+  }
+
+  async function loadQcList() {
+    setLoadingQc(true);
+    const res = await withRetry(() =>
+      supabase.from("machine_qc_list").select("*").eq("system_id", system.id).order("name")
+    );
+    setQcList(res.data ?? []);
+    setLoadingQc(false);
+  }
+
+  async function handleAddQc(e) {
+    e.preventDefault();
+    if (!newQcName.trim()) {
+      setQcError("Le nom du CQ ne peut pas être vide.");
+      return;
+    }
+    setQcError("");
+    try {
+      await withRetry(() =>
+        supabase.from("machine_qc_list").insert({ system_id: system.id, name: newQcName.trim() })
+      );
+      logActivity(username, `a ajouté le CQ « ${newQcName.trim()} » disponible sur « ${system.name} »`);
+      setNewQcName("");
+      loadQcList();
+    } catch (e) {
+      setQcError("Impossible d'ajouter ce CQ (peut-être déjà présent).");
+    }
+  }
+
+  async function handleDeleteQc(id, name) {
+    await withRetry(() => supabase.from("machine_qc_list").delete().eq("id", id));
+    logActivity(username, `a retiré le CQ « ${name} » de « ${system.name} »`);
+    setQcList((q) => q.filter((x) => x.id !== id));
   }
 
   async function handleSaveGeneral(e) {
@@ -418,6 +458,91 @@ export default function EditSystemModal({ system, centers, onClose, onSaved }) {
             {saving ? "…" : "Enregistrer"}
           </button>
         </form>
+
+        {isMachine && (
+          <>
+            <h4 style={{ margin: "22px 0 6px", fontSize: "0.85rem", color: "var(--ink-soft)" }}>
+              CQ disponibles sur cette machine
+            </h4>
+            <p style={{ fontSize: "0.75rem", color: "var(--ink-soft)", margin: "0 0 8px" }}>
+              Liste des types de contrôle qualité réalisables sur cette machine (ex : Dose Absolue, Dose
+              Relative, DailyQA, StepWedge Helical, StepWedge Static…).
+            </p>
+            <form onSubmit={handleAddQc} style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              <input
+                type="text"
+                list="qc-suggestions"
+                value={newQcName}
+                onChange={(e) => setNewQcName(e.target.value)}
+                placeholder="ex : Dose Absolue"
+                style={{ flex: 1 }}
+              />
+              <datalist id="qc-suggestions">
+                <option value="Dose Absolue" />
+                <option value="Dose Relative" />
+                <option value="DailyQA" />
+                <option value="StepWedge Helical" />
+                <option value="StepWedge Static" />
+              </datalist>
+              <button
+                type="submit"
+                style={{
+                  background: "var(--accent)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "6px 14px",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                }}
+              >
+                + Ajouter
+              </button>
+            </form>
+            {qcError && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem" }}>{qcError}</p>}
+
+            {loadingQc ? (
+              <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Chargement…</p>
+            ) : qcList.length === 0 ? (
+              <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Aucun CQ enregistré pour cette machine.</p>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {qcList.map((qc) => (
+                  <span
+                    key={qc.id}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      background: "var(--accent-soft)",
+                      color: "var(--accent-strong)",
+                      borderRadius: 999,
+                      padding: "4px 10px",
+                      fontSize: "0.78rem",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {qc.name}
+                    <button
+                      onClick={() => handleDeleteQc(qc.id, qc.name)}
+                      title="Retirer ce CQ"
+                      style={{
+                        border: "none",
+                        background: "transparent",
+                        color: "var(--accent-strong)",
+                        fontSize: "0.8rem",
+                        lineHeight: 1,
+                        cursor: "pointer",
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
+        )}
 
         {(isMachine || isLogiciel) && (
           <>
