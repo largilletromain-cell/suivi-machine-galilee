@@ -76,17 +76,32 @@ export default function WorkOrders({ centerId }) {
       supabase.from("wo_equipments").select("*").eq("center_id", centerId).order("sort_order")
     );
     setEquipments(res.data ?? []);
-    if (res.data?.length && !activeEquipmentId) {
-      setActiveEquipmentId(res.data[0].id);
-    }
   }
 
   async function loadSystems() {
     const res = await withRetry(() =>
-      supabase.from("systems").select("id, name, machine_id, wo_equipment_id").eq("center_id", centerId)
+      supabase.from("systems").select("id, name, machine_id, wo_equipment_id, category").eq("center_id", centerId)
     );
     setSystems(res.data ?? []);
   }
+
+  // Machines toujours le plus à gauche possible (ce sont les plus utilisées),
+  // puis les autres catégories groupées à la suite.
+  const groupedEquipments = useMemo(() => {
+    const categoryByEquipmentId = Object.fromEntries(
+      systems.filter((s) => s.wo_equipment_id).map((s) => [s.wo_equipment_id, s.category || "machine"])
+    );
+    const order = { machine: 0, logiciel: 1, materiel_mesure: 2, fantome: 3, equipement: 4 };
+    return equipments
+      .map((e) => ({ ...e, category: categoryByEquipmentId[e.id] || "machine" }))
+      .sort((a, b) => (order[a.category] ?? 9) - (order[b.category] ?? 9));
+  }, [equipments, systems]);
+
+  useEffect(() => {
+    if (groupedEquipments.length && !activeEquipmentId) {
+      setActiveEquipmentId(groupedEquipments[0].id);
+    }
+  }, [groupedEquipments]);
 
   async function loadRows(equipmentId) {
     setLoading(true);
@@ -212,14 +227,14 @@ export default function WorkOrders({ centerId }) {
   return (
     <div>
       <SubTabs
-        items={equipments.map((e) => ({ key: e.id, label: e.label || e.code }))}
+        items={groupedEquipments.map((e) => ({ key: e.id, label: e.label || e.code, group: e.category }))}
         activeKey={activeEquipmentId}
         onChange={setActiveEquipmentId}
       />
 
       {equipments.length === 0 && (
         <p style={{ color: "var(--ink-soft)", fontSize: "0.88rem" }}>
-          Aucun système enregistré pour l'instant — créez-en un dans l'onglet <strong>Paramétrage</strong>.
+          Aucun système enregistré pour l'instant — créez-en un dans l'onglet <strong>Registre du matériel</strong>.
         </p>
       )}
 

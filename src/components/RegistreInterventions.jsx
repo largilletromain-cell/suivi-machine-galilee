@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, Fragment } from "react";
 import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
-import { uploadDocument, openDocument } from "../lib/b2";
 import { SubTabs, IconButton, Panel } from "./ui";
 import { useAccess } from "../lib/access";
 
@@ -42,13 +41,12 @@ const emptyForm = {
   date_fin: "",
   heure_fin: "",
   commentaire: "",
-  document_key: null,
-  document_filename: null,
 };
 
 export default function RegistreInterventions({ centerId }) {
   const { readOnly, username } = useAccess();
   const [equipments, setEquipments] = useState([]);
+  const [systems, setSystems] = useState([]);
   const [activeEquipmentId, setActiveEquipmentId] = useState(null);
   const [workOrders, setWorkOrders] = useState([]);
   const [interventions, setInterventions] = useState([]);
@@ -58,11 +56,10 @@ export default function RegistreInterventions({ centerId }) {
   const [error, setError] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(emptyForm);
-  const [documentFile, setDocumentFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     loadEquipments();
+    loadSystems();
   }, [centerId]);
 
   useEffect(() => {
@@ -75,10 +72,32 @@ export default function RegistreInterventions({ centerId }) {
       supabase.from("wo_equipments").select("*").eq("center_id", centerId).order("sort_order")
     );
     setEquipments(res.data ?? []);
-    if (res.data?.length && !activeEquipmentId) {
-      setActiveEquipmentId(res.data[0].id);
-    }
   }
+
+  async function loadSystems() {
+    const res = await withRetry(() =>
+      supabase.from("systems").select("wo_equipment_id, category").eq("center_id", centerId)
+    );
+    setSystems(res.data ?? []);
+  }
+
+  // Machines toujours le plus à gauche possible (ce sont les plus utilisées),
+  // puis les autres catégories groupées à la suite.
+  const groupedEquipments = useMemo(() => {
+    const categoryByEquipmentId = Object.fromEntries(
+      systems.filter((s) => s.wo_equipment_id).map((s) => [s.wo_equipment_id, s.category || "machine"])
+    );
+    const order = { machine: 0, logiciel: 1, materiel_mesure: 2, fantome: 3, equipement: 4 };
+    return equipments
+      .map((e) => ({ ...e, category: categoryByEquipmentId[e.id] || "machine" }))
+      .sort((a, b) => (order[a.category] ?? 9) - (order[b.category] ?? 9));
+  }, [equipments, systems]);
+
+  useEffect(() => {
+    if (groupedEquipments.length && !activeEquipmentId) {
+      setActiveEquipmentId(groupedEquipments[0].id);
+    }
+  }, [groupedEquipments]);
 
   async function loadData(equipmentId) {
     setLoading(true);
@@ -133,15 +152,6 @@ export default function RegistreInterventions({ centerId }) {
     setSaving(true);
     setError("");
     try {
-      let documentKey = null;
-      let documentFilename = null;
-      if (documentFile) {
-        setUploading(true);
-        const uploaded = await uploadDocument(documentFile);
-        documentKey = uploaded.key;
-        documentFilename = uploaded.filename;
-        setUploading(false);
-      }
       await withRetry(() =>
         supabase.from("interventions").insert({
           equipment_id: activeEquipmentId,
@@ -151,18 +161,14 @@ export default function RegistreInterventions({ centerId }) {
           date_fin: form.date_fin || null,
           heure_fin: form.heure_fin || null,
           commentaire: form.commentaire || null,
-          document_key: documentKey,
-          document_filename: documentFilename,
         })
       );
       const equipmentName = equipments.find((e) => e.id === activeEquipmentId)?.label || "";
       logActivity(username, `a ajouté un événement « ${form.event_type} » (${equipmentName})`);
       setForm(emptyForm);
-      setDocumentFile(null);
       await loadData(activeEquipmentId);
     } catch (e) {
-      setUploading(false);
-      setError("Impossible d'enregistrer cet événement (ou d'envoyer le document). Réessayez.");
+      setError("Impossible d'enregistrer cet événement. Réessayez.");
     } finally {
       setSaving(false);
     }
@@ -177,8 +183,6 @@ export default function RegistreInterventions({ centerId }) {
       date_fin: it.date_fin || "",
       heure_fin: it.heure_fin?.slice(0, 5) || "",
       commentaire: it.commentaire || "",
-      document_key: it.document_key || null,
-      document_filename: it.document_filename || null,
     });
   }
 
@@ -187,14 +191,7 @@ export default function RegistreInterventions({ centerId }) {
     setEditForm(emptyForm);
   }
 
-  async function saveEdit(id, newFile) {
-    let documentKey = editForm.document_key || null;
-    let documentFilename = editForm.document_filename || null;
-    if (newFile) {
-      const uploaded = await uploadDocument(newFile);
-      documentKey = uploaded.key;
-      documentFilename = uploaded.filename;
-    }
+  async function saveEdit(id) {
     await withRetry(() =>
       supabase
         .from("interventions")
@@ -204,8 +201,6 @@ export default function RegistreInterventions({ centerId }) {
           date_fin: editForm.date_fin || null,
           heure_fin: editForm.heure_fin || null,
           commentaire: editForm.commentaire || null,
-          document_key: documentKey,
-          document_filename: documentFilename,
         })
         .eq("id", id)
     );
@@ -251,8 +246,6 @@ export default function RegistreInterventions({ centerId }) {
       eventDate: it.date_debut,
       title: EVENT_STYLES[it.event_type]?.label ?? it.event_type,
       commentaire: it.commentaire,
-      documentKey: it.document_key,
-      documentFilename: it.document_filename,
       periods: [
         {
           id: it.id,
@@ -272,14 +265,14 @@ export default function RegistreInterventions({ centerId }) {
   return (
     <div>
       <SubTabs
-        items={equipments.map((e) => ({ key: e.id, label: e.label || e.code }))}
+        items={groupedEquipments.map((e) => ({ key: e.id, label: e.label || e.code, group: e.category }))}
         activeKey={activeEquipmentId}
         onChange={setActiveEquipmentId}
       />
 
       {equipments.length === 0 && (
         <p style={{ color: "var(--ink-soft)", fontSize: "0.88rem" }}>
-          Aucun système enregistré pour l'instant — créez-en un dans l'onglet <strong>Paramétrage</strong>.
+          Aucun système enregistré pour l'instant — créez-en un dans l'onglet <strong>Registre du matériel</strong>.
         </p>
       )}
 
@@ -368,26 +361,9 @@ export default function RegistreInterventions({ centerId }) {
               height: 34,
             }}
           >
-            {uploading ? "Envoi…" : saving ? "…" : "Ajouter"}
+            {saving ? "…" : "Ajouter"}
           </button>
         </form>
-        )}
-
-        {!readOnly && (
-          <div style={{ marginBottom: 18 }}>
-            <Field label="Document à joindre (PDF, optionnel)">
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={(e) => setDocumentFile(e.target.files?.[0] || null)}
-              />
-            </Field>
-            {documentFile && (
-              <p style={{ fontSize: "0.75rem", color: "var(--ink-soft)", margin: "4px 0 0" }}>
-                📎 {documentFile.name}
-              </p>
-            )}
-          </div>
         )}
 
         {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem" }}>{error}</p>}
@@ -429,7 +405,7 @@ export default function RegistreInterventions({ centerId }) {
                         <EditRow
                           editForm={editForm}
                           setEditForm={setEditForm}
-                          onSave={(file) => saveEdit(row.raw.id, file)}
+                          onSave={() => saveEdit(row.raw.id)}
                           onCancel={cancelEdit}
                         />
                       ) : (
@@ -473,23 +449,7 @@ function EventRow({ row, onEdit, onDelete, readOnly }) {
             marginRight: 7,
           }}
         />
-        {row.documentKey ? (
-          <span
-            onClick={() => openDocument(row.documentKey)}
-            title={`Ouvrir ${row.documentFilename || "le document"}`}
-            style={{
-              fontWeight: row.kind === "wo" ? 400 : 600,
-              cursor: "pointer",
-              textDecoration: "underline",
-              textDecorationStyle: "dotted",
-              color: "var(--accent-strong)",
-            }}
-          >
-            📎 {row.title}
-          </span>
-        ) : (
-          <span style={{ fontWeight: row.kind === "wo" ? 400 : 600 }}>{row.title}</span>
-        )}
+        <span style={{ fontWeight: row.kind === "wo" ? 400 : 600 }}>{row.title}</span>
       </td>
       <td style={td}>
         {row.commentaire && <div>{row.commentaire}</div>}
@@ -538,18 +498,6 @@ function EventRow({ row, onEdit, onDelete, readOnly }) {
 }
 
 function EditRow({ editForm, setEditForm, onSave, onCancel }) {
-  const [newFile, setNewFile] = useState(null);
-  const [savingEdit, setSavingEdit] = useState(false);
-
-  async function handleSaveClick() {
-    setSavingEdit(true);
-    try {
-      await onSave(newFile);
-    } finally {
-      setSavingEdit(false);
-    }
-  }
-
   return (
     <tr style={{ borderTop: "1px solid var(--border)", background: "var(--accent-soft)" }}>
       <td colSpan={4} style={{ padding: 10 }}>
@@ -591,25 +539,9 @@ function EditRow({ editForm, setEditForm, onSave, onCancel }) {
             style={{ width: "100%" }}
           />
         </MiniField>
-        <div style={{ marginTop: 8 }}>
-          <MiniField label="Document joint (PDF)">
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {editForm.document_key && !newFile && (
-                <span
-                  onClick={() => openDocument(editForm.document_key)}
-                  style={{ fontSize: "0.78rem", color: "var(--accent-strong)", cursor: "pointer", textDecoration: "underline" }}
-                >
-                  📎 {editForm.document_filename || "Voir le document actuel"}
-                </span>
-              )}
-              <input type="file" accept="application/pdf" onChange={(e) => setNewFile(e.target.files?.[0] || null)} />
-            </div>
-          </MiniField>
-        </div>
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <button
-            onClick={handleSaveClick}
-            disabled={savingEdit}
+            onClick={onSave}
             style={{
               background: "var(--accent)",
               color: "#fff",
@@ -620,7 +552,7 @@ function EditRow({ editForm, setEditForm, onSave, onCancel }) {
               fontWeight: 600,
             }}
           >
-            {savingEdit ? "Enregistrement…" : "Enregistrer"}
+            Enregistrer
           </button>
           <button
             onClick={onCancel}

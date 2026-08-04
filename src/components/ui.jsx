@@ -4,31 +4,44 @@ export function SubTabs({ items, activeKey, onChange }) {
       style={{
         display: "flex",
         gap: 6,
+        alignItems: "center",
         flexWrap: "wrap",
         marginBottom: 18,
         borderBottom: "1px solid var(--border)",
         paddingBottom: 10,
       }}
     >
-      {items.map((it) => {
+      {items.map((it, i) => {
         const active = it.key === activeKey;
+        const newGroup = it.group && i > 0 && items[i - 1].group !== it.group;
         return (
-          <button
-            key={it.key}
-            onClick={() => onChange(it.key)}
-            className={active ? "mono" : ""}
-            style={{
-              border: "1px solid " + (active ? "var(--accent)" : "var(--border)"),
-              background: active ? "var(--accent)" : "var(--surface)",
-              color: active ? "#fff" : "var(--ink)",
-              borderRadius: 999,
-              padding: "6px 14px",
-              fontSize: "0.82rem",
-              fontWeight: 600,
-            }}
-          >
-            {it.label}
-          </button>
+          <div key={it.key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {newGroup && (
+              <span
+                style={{
+                  width: 1,
+                  height: 20,
+                  background: "var(--border)",
+                  marginRight: 2,
+                }}
+              />
+            )}
+            <button
+              onClick={() => onChange(it.key)}
+              className={active ? "mono" : ""}
+              style={{
+                border: "1px solid " + (active ? "var(--accent)" : "var(--border)"),
+                background: active ? "var(--accent)" : "var(--surface)",
+                color: active ? "#fff" : "var(--ink)",
+                borderRadius: 999,
+                padding: "6px 14px",
+                fontSize: "0.82rem",
+                fontWeight: 600,
+              }}
+            >
+              {it.label}
+            </button>
+          </div>
         );
       })}
     </div>
