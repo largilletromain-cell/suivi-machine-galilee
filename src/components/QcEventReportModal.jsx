@@ -12,8 +12,34 @@ const MONTHS_FR = [
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
 ];
 
+function stripAccents(s) {
+  return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 function sanitizeFilename(s) {
-  return (s || "").replace(/[^a-zA-Z0-9._-]+/g, "_");
+  return stripAccents(s).replace(/[^a-zA-Z0-9._-]+/g, "_");
+}
+
+// Calcule le libellé de période affiché sur le rapport selon la périodicité
+// du contrôle qualité : mois+année, trimestre, quadrimestre, semestre ou
+// juste l'année.
+function computePeriodLabel(eventType, dateDebut) {
+  if (!dateDebut) return "Non renseignée";
+  const [yy, mm] = dateDebut.split("-");
+  const month = parseInt(mm, 10);
+  if (!month) return "Non renseignée";
+  switch (eventType) {
+    case "cq_trimestriel":
+      return `T${Math.ceil(month / 3)} ${yy}`;
+    case "cq_quadrimestriel":
+      return `Q${Math.ceil(month / 4)} ${yy}`;
+    case "cq_semestriel":
+      return `S${Math.ceil(month / 6)} ${yy}`;
+    case "cq_annuel":
+      return `${yy}`;
+    default:
+      return `${MONTHS_FR[month - 1] || mm} ${yy}`;
+  }
 }
 
 export default function QcEventReportModal({ event, eventLabel, centerId, onClose }) {
@@ -52,7 +78,7 @@ export default function QcEventReportModal({ event, eventLabel, centerId, onClos
       }
 
       const [yy, mm] = (event.date_debut || "").split("-");
-      const monthLabel = mm ? `${MONTHS_FR[parseInt(mm, 10) - 1] || mm} ${yy}` : "Non renseigné";
+      const monthLabel = computePeriodLabel(event.event_type, event.date_debut);
 
       const bytes = await buildReport({
         centerName,

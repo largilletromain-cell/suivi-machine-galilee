@@ -13,8 +13,12 @@ function formatDate(iso) {
   return `${d}/${m}/${y}`;
 }
 
+function stripAccents(s) {
+  return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 function sanitizeFilename(s) {
-  return (s || "").replace(/[^a-zA-Z0-9._-]+/g, "_");
+  return stripAccents(s).replace(/[^a-zA-Z0-9._-]+/g, "_");
 }
 
 export default function QcReportModal({ workOrder, centerId, onClose }) {
