@@ -2,6 +2,10 @@ import { useState } from "react";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { supabase, withRetry, authenticateUser, logActivity } from "../lib/supabaseClient";
 
+const NAVY = rgb(39 / 255, 50 / 255, 114 / 255);
+const BLUE = rgb(50 / 255, 93 / 255, 168 / 255);
+const GREY = rgb(0.55, 0.55, 0.55);
+
 function formatDate(iso) {
   if (!iso) return null;
   const [y, m, d] = iso.split("-");
@@ -338,6 +342,14 @@ export default function QcReportModal({ workOrder, centerId, onClose }) {
   );
 }
 
+function base64ToBytes(dataUri) {
+  const base64 = dataUri.split(",")[1];
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
 async function buildReport({
   centerName,
   machineName,
@@ -351,9 +363,13 @@ async function buildReport({
   signataire,
   files,
 }) {
+  const { LOGO_VITRUVIEN_PNG } = await import("../assets/logoVitruvien.js");
+
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const logoImage = await doc.embedPng(base64ToBytes(LOGO_VITRUVIEN_PNG));
+
   const page = doc.addPage([595.28, 841.89]);
   const marginX = 50;
   const maxWidth = 495;
@@ -376,41 +392,75 @@ async function buildReport({
     return lines;
   }
 
-  function drawTitle(text, size, useBold, gapAfter) {
-    page.drawText(text, { x: marginX, y, size, font: useBold ? bold : font, color: rgb(0.05, 0.1, 0.15) });
+  function drawTitle(text, size, useBold, gapAfter, color = NAVY) {
+    page.drawText(text, { x: marginX, y, size, font: useBold ? bold : font, color });
     y -= gapAfter;
   }
 
-  function drawField(label, value, { size = 11, lineHeight = 15, gapAfter = 14 } = {}) {
+  function drawSeparator(gapBefore = 10, gapAfter = 16) {
+    y -= gapBefore;
+    page.drawLine({
+      start: { x: marginX, y },
+      end: { x: marginX + maxWidth, y },
+      thickness: 0.75,
+      color: NAVY,
+    });
+    y -= gapAfter;
+  }
+
+  function drawField(label, value, { size = 11, lineHeight = 15, gapAfter = 14, color = BLUE } = {}) {
     const full = `${label} : ${value}`;
     const lines = wrap(full, size, font);
     lines.forEach((line, i) => {
       if (i === 0) {
-        page.drawText(`${label} : `, { x: marginX, y, size, font: bold });
+        page.drawText(`${label} : `, { x: marginX, y, size, font: bold, color });
         const labelWidth = bold.widthOfTextAtSize(`${label} : `, size);
         const rest = line.slice(`${label} : `.length);
-        page.drawText(rest, { x: marginX + labelWidth, y, size, font });
+        page.drawText(rest, { x: marginX + labelWidth, y, size, font, color });
       } else {
-        page.drawText(line, { x: marginX, y, size, font });
+        page.drawText(line, { x: marginX, y, size, font, color });
       }
       y -= lineHeight;
     });
     y -= gapAfter - lineHeight;
   }
 
-  drawTitle(centerName || "", 14, true, 22);
-  drawTitle("Rapport de contrôles de qualité post-intervention", 16, true, 34);
+  // --- En-tête : logo à gauche, nom du centre à droite ---
+  const logoSize = 64;
+  page.drawImage(logoImage, { x: marginX, y: y - logoSize + 10, width: logoSize, height: logoSize });
+  const centerNameSize = 15;
+  const centerNameWidth = bold.widthOfTextAtSize(centerName || "", centerNameSize);
+  page.drawText(centerName || "", {
+    x: marginX + maxWidth - centerNameWidth,
+    y: y - logoSize / 2 + 10,
+    size: centerNameSize,
+    font: bold,
+    color: NAVY,
+  });
+  y -= logoSize + 20;
+
+  // --- Titre ---
+  drawTitle("Rapport de contrôles de qualité post-intervention", 16, true, 30, NAVY);
+  drawSeparator();
 
   drawField("Installation", `${machineName}${serialNumber ? ` — n° série ${serialNumber}` : ""}`);
+  drawSeparator();
+
   drawField(
     "Date d'intervention",
     `${dateIntervention}${immobStart ? ` (immobilisation du ${immobStart} au ${immobEnd || "—"})` : ""}`
   );
-  drawField("Intervenant", technicien);
-  drawField("Intervention", interventionText);
-  drawField("Contrôles effectués après intervention", selectedCq.length ? selectedCq.join(", ") : "Aucun renseigné");
+  drawSeparator();
 
-  y -= 20;
+  drawField("Intervenant", technicien);
+  drawSeparator();
+
+  drawField("Nature de l'intervention", interventionText);
+  drawSeparator();
+
+  drawField("Contrôles effectués après l'intervention", selectedCq.length ? selectedCq.join(", ") : "Aucun renseigné");
+
+  y -= 24;
   page.drawLine({
     start: { x: marginX, y: y + 10 },
     end: { x: marginX + maxWidth, y: y + 10 },
@@ -418,13 +468,13 @@ async function buildReport({
     color: rgb(0.7, 0.7, 0.7),
   });
   y -= 10;
-  drawField("Signature", signataire, { gapAfter: 0 });
+  drawField("Signature", signataire, { gapAfter: 0, color: rgb(0, 0, 0) });
   page.drawText(new Date().toLocaleDateString("fr-FR"), {
     x: marginX,
     y: y - 4,
     size: 10,
     font,
-    color: rgb(0.4, 0.4, 0.4),
+    color: GREY,
   });
 
   for (const file of files) {
