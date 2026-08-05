@@ -531,29 +531,39 @@ function EventRow({ row, onEdit, onDelete, readOnly, onOpenReport, onValidate, c
           </div>
         ) : row.kind === "wo" ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
-            <button
-              onClick={onOpenReport}
-              disabled={!row.raw.validated}
-              title={
-                row.raw.validated
-                  ? "Générer un rapport de contrôles qualité post-intervention"
-                  : "L'intervention doit être validée avant de pouvoir générer le rapport CQ"
-              }
-              style={{
-                border: "1px solid " + (row.raw.validated ? "var(--accent)" : "var(--border)"),
-                background: row.raw.validated ? "var(--accent-soft)" : "var(--paper)",
-                color: row.raw.validated ? "var(--accent-strong)" : "var(--ink-soft)",
-                borderRadius: 6,
-                padding: "4px 10px",
-                fontSize: "0.72rem",
-                fontWeight: 600,
-                whiteSpace: "nowrap",
-                cursor: row.raw.validated ? "pointer" : "not-allowed",
-                opacity: row.raw.validated ? 1 : 0.6,
-              }}
-            >
-              📄 Rapport CQ
-            </button>
+            {!row.raw.resolved_via_other_wo && (
+              <button
+                onClick={onOpenReport}
+                disabled={!row.raw.validated}
+                title={
+                  row.raw.validated
+                    ? "Générer un rapport de contrôles qualité post-intervention"
+                    : "L'intervention doit être validée avant de pouvoir générer le rapport CQ"
+                }
+                style={{
+                  border: "1px solid " + (row.raw.validated ? "var(--accent)" : "var(--border)"),
+                  background: row.raw.validated ? "var(--accent-soft)" : "var(--paper)",
+                  color: row.raw.validated ? "var(--accent-strong)" : "var(--ink-soft)",
+                  borderRadius: 6,
+                  padding: "4px 10px",
+                  fontSize: "0.72rem",
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                  cursor: row.raw.validated ? "pointer" : "not-allowed",
+                  opacity: row.raw.validated ? 1 : 0.6,
+                }}
+              >
+                📄 Rapport CQ
+              </button>
+            )}
+            {row.raw.resolved_via_other_wo && (
+              <span
+                title="Résolu par un autre Work Order : le rapport CQ se génère depuis la ligne de ce Work Order résolutif"
+                style={{ fontSize: "0.72rem", color: "var(--ink-soft)", fontStyle: "italic" }}
+              >
+                🔁 voir WO résolutif
+              </span>
+            )}
             <span title="Modifiable uniquement dans l'onglet Work Order" style={{ color: "var(--ink-soft)", fontSize: "0.9rem" }}>
               🔒
             </span>

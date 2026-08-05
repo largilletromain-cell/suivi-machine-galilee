@@ -114,6 +114,15 @@ export default function QcReportModal({ workOrder, centerId, onClose }) {
         .join(" ; ");
       const interventionText = [workOrder.panne_erreur, periodComments].filter(Boolean).join(" — ");
 
+      // Autres Work Orders que celui-ci a résolus (relation inverse de
+      // resolved_via_wo_id), le cas échéant.
+      const resolvedRes = await withRetry(() =>
+        supabase.from("work_orders").select("wo_number, panne_erreur").eq("resolved_via_wo_id", workOrder.id)
+      );
+      const resolvedOtherWos = (resolvedRes.data ?? [])
+        .map((w) => (w.wo_number ? `#${w.wo_number} — ${w.panne_erreur}` : w.panne_erreur))
+        .join(" ; ");
+
       const bytes = await buildReport({
         centerName,
         machineName: machineInfo?.name || "",
@@ -122,6 +131,7 @@ export default function QcReportModal({ workOrder, centerId, onClose }) {
         immobStart,
         immobEnd,
         technicien: techniciens || "Non renseigné",
+        resolvedOtherWos,
         interventionText: interventionText || "—",
         selectedCq: [...selectedQc],
         signataire,
@@ -304,6 +314,7 @@ async function buildReport({
   immobStart,
   immobEnd,
   technicien,
+  resolvedOtherWos,
   interventionText,
   selectedCq,
   signataire,
@@ -396,13 +407,18 @@ async function buildReport({
   drawField("Intervenant", technicien);
   drawSeparator();
 
+  if (resolvedOtherWos) {
+    drawField("WorkOrder(s) résolu(s)", resolvedOtherWos);
+    drawSeparator();
+  }
+
   drawField("Nature de l'intervention", interventionText);
   drawSeparator();
 
   drawField("Contrôles effectués après l'intervention", selectedCq.length ? selectedCq.join(", ") : "Aucun renseigné");
   drawSeparator();
 
-  drawField("Signature", signataire, { labelColor: NAVY, valueColor: BLUE });
+  drawField("Signature", signataire, { labelColor: BLUE, valueColor: BLUE });
   page.drawText(new Date().toLocaleDateString("fr-FR"), {
     x: marginX,
     y,

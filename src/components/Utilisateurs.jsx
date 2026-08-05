@@ -248,6 +248,8 @@ export default function Utilisateurs({ centers, onCentersChanged }) {
         <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem", marginTop: 0, flex: 1 }}>
           <strong>Admin</strong> a accès à tout, y compris cet onglet.{" "}
           <strong>Physicien</strong> a accès à tout sauf cet onglet.{" "}
+          <strong>Aide-physicien</strong> a les mêmes droits que Physicien, sauf qu'il ne peut pas valider
+          les interventions correctives (Registre des Interventions).{" "}
           <strong>Visualisation</strong> voit les mêmes informations que Physicien mais sans pouvoir rien
           modifier. Pour n'importe quel rôle, choisissez « Tous les centres » si la personne doit pouvoir
           basculer entre les centres, ou un centre précis si elle doit y rester cantonnée.
@@ -319,6 +321,7 @@ export default function Utilisateurs({ centers, onCentersChanged }) {
               style={{ width: "100%" }}
             >
               <option value="physicien">Physicien</option>
+              <option value="aide_physicien">Aide-physicien</option>
               <option value="visualisation">Visualisation</option>
               <option value="admin">Admin</option>
             </select>
@@ -395,6 +398,7 @@ export default function Utilisateurs({ centers, onCentersChanged }) {
                     style={{ fontSize: "0.82rem" }}
                   >
                     <option value="physicien">Physicien</option>
+                    <option value="aide_physicien">Aide-physicien</option>
                     <option value="visualisation">Visualisation</option>
                     <option value="admin">Admin</option>
                   </select>
