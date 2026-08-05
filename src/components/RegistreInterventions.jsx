@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, Fragment } from "react";
 import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
 import { SubTabs, IconButton, Panel } from "./ui";
 import { useAccess } from "../lib/access";
+import QcReportModal from "./QcReportModal";
 
 const MONTHS_FR = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
@@ -56,6 +57,7 @@ export default function RegistreInterventions({ centerId }) {
   const [error, setError] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(emptyForm);
+  const [reportWorkOrder, setReportWorkOrder] = useState(null);
 
   useEffect(() => {
     loadEquipments();
@@ -107,7 +109,7 @@ export default function RegistreInterventions({ centerId }) {
         withRetry(() =>
           supabase
             .from("work_orders")
-            .select("*, downtime_periods(id, date_debut, heure_debut, date_fin, heure_fin, commentaire)")
+            .select("*, downtime_periods(id, date_debut, heure_debut, date_fin, heure_fin, commentaire, technicien)")
             .eq("equipment_id", equipmentId)
             .not("date_intervention", "is", null)
         ),
@@ -409,7 +411,13 @@ export default function RegistreInterventions({ centerId }) {
                           onCancel={cancelEdit}
                         />
                       ) : (
-                        <EventRow row={row} onEdit={startEdit} onDelete={handleDelete} readOnly={readOnly} />
+                        <EventRow
+                          row={row}
+                          onEdit={startEdit}
+                          onDelete={handleDelete}
+                          readOnly={readOnly}
+                          onOpenReport={() => setReportWorkOrder(row.raw)}
+                        />
                       )}
                     </Fragment>
                   );
@@ -419,11 +427,19 @@ export default function RegistreInterventions({ centerId }) {
           </table>
         )}
       </Panel>
+
+      {reportWorkOrder && (
+        <QcReportModal
+          workOrder={reportWorkOrder}
+          centerId={centerId}
+          onClose={() => setReportWorkOrder(null)}
+        />
+      )}
     </div>
   );
 }
 
-function EventRow({ row, onEdit, onDelete, readOnly }) {
+function EventRow({ row, onEdit, onDelete, readOnly, onOpenReport }) {
   const style = EVENT_STYLES[row.eventType] ?? EVENT_STYLES.corrective;
   return (
     <tr style={{ borderTop: "1px solid var(--border)" }}>
@@ -488,9 +504,27 @@ function EventRow({ row, onEdit, onDelete, readOnly }) {
             </IconButton>
           </div>
         ) : row.kind === "wo" ? (
-          <span title="Modifiable uniquement dans l'onglet Work Order" style={{ color: "var(--ink-soft)", fontSize: "0.9rem" }}>
-            🔒
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+            <button
+              onClick={onOpenReport}
+              title="Générer un rapport de contrôles qualité post-intervention"
+              style={{
+                border: "1px solid var(--accent)",
+                background: "var(--accent-soft)",
+                color: "var(--accent-strong)",
+                borderRadius: 6,
+                padding: "4px 10px",
+                fontSize: "0.72rem",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              📄 Rapport CQ
+            </button>
+            <span title="Modifiable uniquement dans l'onglet Work Order" style={{ color: "var(--ink-soft)", fontSize: "0.9rem" }}>
+              🔒
+            </span>
+          </div>
         ) : null}
       </td>
     </tr>
