@@ -3,6 +3,7 @@ import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
 import { SubTabs, IconButton, Panel } from "./ui";
 import { useAccess } from "../lib/access";
 import QcReportModal from "./QcReportModal";
+import QcEventReportModal from "./QcEventReportModal";
 
 const MONTHS_FR = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
@@ -22,6 +23,17 @@ function formatDate(iso) {
   return `${d}/${m}/${y}`;
 }
 
+// Types d'événement considérés comme un contrôle qualité (donnent accès au
+// bouton de génération de rapport CQ).
+const CQ_EVENT_TYPES = [
+  "controle_qualite",
+  "cq_mensuel",
+  "cq_trimestriel",
+  "cq_quadrimestriel",
+  "cq_semestriel",
+  "cq_annuel",
+];
+
 // Palette dédiée, en teintes vives et bien distinctes (indépendante des
 // couleurs de statut utilisées ailleurs, plus douces et donc moins lisibles
 // comme repères de couleur ici) : rouge = correctif (réactif à une panne),
@@ -30,13 +42,18 @@ function formatDate(iso) {
 const EVENT_STYLES = {
   corrective: { color: "#e0292a", bg: "#fdeaea", label: "Maintenance corrective" },
   controle_qualite: { color: "#1565e0", bg: "#e8f0fe", label: "Contrôle de qualité" },
+  cq_mensuel: { color: "#1565e0", bg: "#e8f0fe", label: "Contrôle de qualité Mensuel" },
+  cq_trimestriel: { color: "#1565e0", bg: "#e8f0fe", label: "Contrôle de qualité Trimestriel" },
+  cq_quadrimestriel: { color: "#1565e0", bg: "#e8f0fe", label: "Contrôle de qualité Quadrimestriel" },
+  cq_semestriel: { color: "#1565e0", bg: "#e8f0fe", label: "Contrôle de qualité Semestriel" },
+  cq_annuel: { color: "#1565e0", bg: "#e8f0fe", label: "Contrôle de qualité Annuel" },
   maintenance_preventive: { color: "#1a9c4b", bg: "#e7f7ed", label: "Maintenance préventive" },
   parametrage_machine: { color: "#8b3fd1", bg: "#f3e8fc", label: "Paramétrage machine" },
   autre: { color: "#6b7280", bg: "#eef0f2", label: "Autre" },
 };
 
 const emptyForm = {
-  event_type: "controle_qualite",
+  event_type: "cq_mensuel",
   date_debut: "",
   heure_debut: "",
   date_fin: "",
@@ -58,27 +75,25 @@ export default function RegistreInterventions({ centerId }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(emptyForm);
   const [reportWorkOrder, setReportWorkOrder] = useState(null);
+  const [reportEvent, setReportEvent] = useState(null);
   const canValidate = role === "admin" || role === "physicien";
 
-  async function handleValidate(wo) {
-    if (wo.validated) {
+  async function handleValidate(table, item, label) {
+    if (item.validated) {
       if (!canValidate) return;
-      if (!window.confirm("Retirer la validation de cette intervention corrective ?")) return;
+      if (!window.confirm("Retirer la validation de cet événement ?")) return;
       await withRetry(() =>
-        supabase
-          .from("work_orders")
-          .update({ validated: false, validated_by: null, validated_at: null })
-          .eq("id", wo.id)
+        supabase.from(table).update({ validated: false, validated_by: null, validated_at: null }).eq("id", item.id)
       );
-      logActivity(username, `a retiré la validation de l'intervention (${wo.panne_erreur})`);
+      logActivity(username, `a retiré la validation de l'événement (${label})`);
     } else {
       await withRetry(() =>
         supabase
-          .from("work_orders")
+          .from(table)
           .update({ validated: true, validated_by: username, validated_at: new Date().toISOString() })
-          .eq("id", wo.id)
+          .eq("id", item.id)
       );
-      logActivity(username, `a validé l'intervention corrective (${wo.panne_erreur})`);
+      logActivity(username, `a validé l'événement (${label})`);
     }
     await loadData(activeEquipmentId);
   }
@@ -337,7 +352,11 @@ export default function RegistreInterventions({ centerId }) {
               onChange={(e) => setForm({ ...form, event_type: e.target.value })}
               style={{ width: "100%" }}
             >
-              <option value="controle_qualite">Contrôle de qualité</option>
+              <option value="cq_mensuel">Contrôle de qualité Mensuel</option>
+              <option value="cq_trimestriel">Contrôle de qualité Trimestriel</option>
+              <option value="cq_quadrimestriel">Contrôle de qualité Quadrimestriel</option>
+              <option value="cq_semestriel">Contrôle de qualité Semestriel</option>
+              <option value="cq_annuel">Contrôle de qualité Annuel</option>
               <option value="maintenance_preventive">Maintenance préventive</option>
               <option value="parametrage_machine">Paramétrage machine</option>
               <option value="autre">Autre</option>
@@ -446,8 +465,12 @@ export default function RegistreInterventions({ centerId }) {
                           onEdit={startEdit}
                           onDelete={handleDelete}
                           readOnly={readOnly}
-                          onOpenReport={() => setReportWorkOrder(row.raw)}
-                          onValidate={() => handleValidate(row.raw)}
+                          onOpenReport={() =>
+                            row.kind === "wo" ? setReportWorkOrder(row.raw) : setReportEvent(row.raw)
+                          }
+                          onValidate={() =>
+                            handleValidate(row.kind === "wo" ? "work_orders" : "interventions", row.raw, row.title)
+                          }
                           canValidate={canValidate}
                         />
                       )}
@@ -465,6 +488,14 @@ export default function RegistreInterventions({ centerId }) {
           workOrder={reportWorkOrder}
           centerId={centerId}
           onClose={() => setReportWorkOrder(null)}
+        />
+      )}
+      {reportEvent && (
+        <QcEventReportModal
+          event={reportEvent}
+          eventLabel={EVENT_STYLES[reportEvent.event_type]?.label ?? reportEvent.event_type}
+          centerId={centerId}
+          onClose={() => setReportEvent(null)}
         />
       )}
     </div>
@@ -515,66 +546,102 @@ function EventRow({ row, onEdit, onDelete, readOnly, onOpenReport, onValidate, c
         )}
       </td>
       <td style={td}>
-        {row.kind === "intervention" && !readOnly ? (
-          <div style={{ display: "flex", gap: 6 }}>
-            <button
-              onClick={() => onEdit(row.raw)}
-              title="Modifier"
-              style={{
-                border: "1px solid var(--border)",
-                background: "var(--surface)",
-                borderRadius: 6,
-                width: 28,
-                height: 28,
-                fontSize: "0.85rem",
-              }}
-            >
-              ✎
-            </button>
-            <IconButton title="Supprimer" danger onClick={() => onDelete(row.raw.id)}>
-              ✕
-            </IconButton>
-          </div>
-        ) : row.kind === "wo" ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
-            {!row.raw.resolved_via_other_wo && (
-              <button
-                onClick={onOpenReport}
-                disabled={!row.canReport}
-                title={
-                  row.canReport
-                    ? "Générer un rapport de contrôles qualité post-intervention"
-                    : !row.raw.validated
-                    ? "L'intervention doit être validée avant de pouvoir générer le rapport CQ"
-                    : "Un des Work Orders résolus par celui-ci n'est pas encore validé"
-                }
-                style={{
-                  border: "1px solid " + (row.canReport ? "var(--accent)" : "var(--border)"),
-                  background: row.canReport ? "var(--accent-soft)" : "var(--paper)",
-                  color: row.canReport ? "var(--accent-strong)" : "var(--ink-soft)",
-                  borderRadius: 6,
-                  padding: "4px 10px",
-                  fontSize: "0.72rem",
-                  fontWeight: 600,
-                  whiteSpace: "nowrap",
-                  cursor: row.canReport ? "pointer" : "not-allowed",
-                  opacity: row.canReport ? 1 : 0.6,
-                }}
-              >
-                📄 Rapport CQ
-              </button>
-            )}
-            {row.raw.resolved_via_other_wo && (
-              <span
-                title="Résolu par un autre Work Order : le rapport CQ se génère depuis la ligne de ce Work Order résolutif"
-                style={{ fontSize: "0.72rem", color: "var(--ink-soft)", fontStyle: "italic" }}
-              >
-                🔁 voir WO résolutif
+        <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+          {row.kind === "intervention" && (
+            <>
+              {CQ_EVENT_TYPES.includes(row.eventType) && (
+                <button
+                  onClick={onOpenReport}
+                  disabled={!row.raw.validated}
+                  title={
+                    row.raw.validated
+                      ? "Générer le rapport de ce contrôle qualité"
+                      : "L'événement doit être validé avant de pouvoir générer le rapport CQ"
+                  }
+                  style={{
+                    border: "1px solid " + (row.raw.validated ? "var(--accent)" : "var(--border)"),
+                    background: row.raw.validated ? "var(--accent-soft)" : "var(--paper)",
+                    color: row.raw.validated ? "var(--accent-strong)" : "var(--ink-soft)",
+                    borderRadius: 6,
+                    padding: "4px 10px",
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    whiteSpace: "nowrap",
+                    cursor: row.raw.validated ? "pointer" : "not-allowed",
+                    opacity: row.raw.validated ? 1 : 0.6,
+                  }}
+                >
+                  📄 Rapport CQ
+                </button>
+              )}
+              {!readOnly && (
+                <>
+                  <button
+                    onClick={() => onEdit(row.raw)}
+                    title="Modifier"
+                    style={{
+                      border: "1px solid var(--border)",
+                      background: "var(--surface)",
+                      borderRadius: 6,
+                      width: 28,
+                      height: 28,
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    ✎
+                  </button>
+                  <IconButton title="Supprimer" danger onClick={() => onDelete(row.raw.id)}>
+                    ✕
+                  </IconButton>
+                </>
+              )}
+            </>
+          )}
+
+          {row.kind === "wo" && (
+            <>
+              {!row.raw.resolved_via_other_wo && (
+                <button
+                  onClick={onOpenReport}
+                  disabled={!row.canReport}
+                  title={
+                    row.canReport
+                      ? "Générer un rapport de contrôles qualité post-intervention"
+                      : !row.raw.validated
+                      ? "L'intervention doit être validée avant de pouvoir générer le rapport CQ"
+                      : "Un des Work Orders résolus par celui-ci n'est pas encore validé"
+                  }
+                  style={{
+                    border: "1px solid " + (row.canReport ? "var(--accent)" : "var(--border)"),
+                    background: row.canReport ? "var(--accent-soft)" : "var(--paper)",
+                    color: row.canReport ? "var(--accent-strong)" : "var(--ink-soft)",
+                    borderRadius: 6,
+                    padding: "4px 10px",
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    whiteSpace: "nowrap",
+                    cursor: row.canReport ? "pointer" : "not-allowed",
+                    opacity: row.canReport ? 1 : 0.6,
+                  }}
+                >
+                  📄 Rapport CQ
+                </button>
+              )}
+              {row.raw.resolved_via_other_wo && (
+                <span
+                  title="Résolu par un autre Work Order : le rapport CQ se génère depuis la ligne de ce Work Order résolutif"
+                  style={{ fontSize: "0.72rem", color: "var(--ink-soft)", fontStyle: "italic" }}
+                >
+                  🔁 voir WO résolutif
+                </span>
+              )}
+              <span title="Modifiable uniquement dans l'onglet Work Order" style={{ color: "var(--ink-soft)", fontSize: "0.9rem" }}>
+                🔒
               </span>
-            )}
-            <span title="Modifiable uniquement dans l'onglet Work Order" style={{ color: "var(--ink-soft)", fontSize: "0.9rem" }}>
-              🔒
-            </span>
+            </>
+          )}
+
+          {(row.kind === "intervention" || row.kind === "wo") && (
             <button
               onClick={onValidate}
               disabled={!canValidate}
@@ -582,7 +649,7 @@ function EventRow({ row, onEdit, onDelete, readOnly, onOpenReport, onValidate, c
                 row.raw.validated
                   ? `Validé par ${row.raw.validated_by || "?"}${canValidate ? " — cliquer pour retirer la validation" : ""}`
                   : canValidate
-                  ? "Cliquer pour valider cette intervention corrective"
+                  ? "Cliquer pour valider cet événement"
                   : "Seuls Admin et Physicien peuvent valider"
               }
               style={{
@@ -600,8 +667,8 @@ function EventRow({ row, onEdit, onDelete, readOnly, onOpenReport, onValidate, c
                 <span style={{ color: "var(--status-bad-ink)" }}>❌</span>
               )}
             </button>
-          </div>
-        ) : null}
+          )}
+        </div>
       </td>
     </tr>
   );
