@@ -289,6 +289,7 @@ function chip(type) {
   const colors = {
     Radixact: { bg: "var(--accent-soft)", ink: "var(--accent-strong)" },
     Varian: { bg: "var(--status-warn-bg)", ink: "var(--status-warn-ink)" },
+    Scanner: { bg: "#e7f7ed", ink: "#1a9c4b" },
   };
   const c = colors[type] || { bg: "var(--paper)", ink: "var(--ink-soft)" };
   return {

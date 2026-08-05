@@ -62,7 +62,7 @@ export default function GuideModal({ onClose }) {
 
         <Section title="Registre Pannes">
           <ul style={ulStyle}>
-            <li>Un sous-onglet par machine Radixact/Varian.</li>
+            <li>Un sous-onglet par machine (Radixact, Varian, Scanner…).</li>
             <li>Formulaire en haut pour ajouter une panne : date, heure de début/fin, erreur rencontrée (liste déroulante), commentaire.</li>
             <li>
               Les pannes sont regroupées <strong>par mois</strong>, repliées par défaut sauf le mois en
@@ -101,7 +101,7 @@ export default function GuideModal({ onClose }) {
             <li>Histogramme de projection : 2 derniers mois, mois en cours, 3 prochains mois.</li>
             <li>Graphique d'évolution sur 12 mois glissants (WO ouverts / pannes signalées).</li>
             <li>Bouton <strong>📄 Générer le rapport PDF</strong> pour exporter tout ça en un document à transmettre.</li>
-            <li>Nécessite d'avoir renseigné les horaires d'ouverture des machines dans l'onglet Paramètres.</li>
+            <li>Nécessite d'avoir renseigné les horaires d'ouverture du centre dans Utilisateurs et centres.</li>
           </ul>
         </Section>
 
@@ -121,7 +121,7 @@ export default function GuideModal({ onClose }) {
             </li>
             <li>
               Un sous-onglet Work Order est toujours créé automatiquement ; un sous-onglet Registre
-              Pannes en plus si c'est une machine Radixact ou Varian.
+              Pannes en plus si c'est une machine (Radixact, Varian ou Scanner).
             </li>
             <li>Les entrées sont regroupées par catégorie, en sous-groupes repliables.</li>
             <li>
@@ -134,19 +134,15 @@ export default function GuideModal({ onClose }) {
           </ul>
         </Section>
 
-        <Section title="Paramètres">
-          <ul style={ulStyle}>
-            <li>
-              Réglez ici les horaires d'ouverture des machines (début/fin de journée) — utilisés pour
-              calculer <strong>automatiquement</strong> la disponibilité théorique de chaque mois dans
-              Statistiques (jours ouvrés × amplitude horaire), sans plus avoir à la saisir mois par mois.
-            </li>
-          </ul>
-        </Section>
-
         <Section title="Utilisateurs et centres (Admin uniquement)">
           <ul style={ulStyle}>
             <li>Créez ici les centres (code + nom affiché).</li>
+            <li>
+              Pour chaque centre, renseignez ses coordonnées (adresse, téléphone, e-mail) et ses{" "}
+              <strong>horaires d'ouverture</strong> (début/fin de journée) — utilisés pour calculer{" "}
+              <strong>automatiquement</strong> la disponibilité théorique de chaque mois dans
+              Statistiques (jours ouvrés × amplitude horaire), sans plus avoir à la saisir mois par mois.
+            </li>
             <li>Bouton <strong>+ Ajouter un utilisateur</strong> : nom, identifiant, mot de passe, rôle, centre (ou « Tous les centres »).</li>
             <li>Modifiable directement dans le tableau (mot de passe, rôle, centre).</li>
           </ul>

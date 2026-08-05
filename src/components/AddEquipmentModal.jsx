@@ -155,6 +155,7 @@ export default function AddEquipmentModal({ centers, defaultCenterId, onClose, o
               >
                 <option value="Radixact">Radixact</option>
                 <option value="Varian">Varian</option>
+                <option value="Scanner">Scanner</option>
               </select>
             </>
           )}

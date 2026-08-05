@@ -400,7 +400,7 @@ export default function Statistiques({ centerId }) {
 
       {machines.length === 0 && (
         <p style={{ color: "var(--ink-soft)", fontSize: "0.88rem" }}>
-          Aucune machine avec Registre Pannes (Radixact/Varian) pour ce centre.
+          Aucune machine avec Registre Pannes pour ce centre.
         </p>
       )}
 

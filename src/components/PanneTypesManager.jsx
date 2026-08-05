@@ -3,7 +3,7 @@ import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
 import { IconButton, Panel } from "./ui";
 import { useAccess } from "../lib/access";
 
-const PRESET_MACHINE_TYPES = ["Radixact", "Varian"];
+const PRESET_MACHINE_TYPES = ["Radixact", "Varian", "Scanner"];
 
 export default function PanneTypesManager() {
   const { readOnly, username } = useAccess();

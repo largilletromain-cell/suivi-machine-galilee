@@ -234,7 +234,7 @@ export default function RegistrePannes({ centerId }) {
 
       {machines.length === 0 && (
         <p style={{ color: "var(--ink-soft)", fontSize: "0.88rem" }}>
-          Aucune machine Radixact/Varian enregistrée pour l'instant — créez-en une dans l'onglet{" "}
+          Aucune machine enregistrée pour l'instant — créez-en une dans l'onglet{" "}
           <strong>Paramétrage</strong>.
         </p>
       )}
