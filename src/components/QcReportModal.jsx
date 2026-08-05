@@ -112,7 +112,10 @@ export default function QcReportModal({ workOrder, centerId, onClose }) {
         .map((p) => p.commentaire)
         .filter(Boolean)
         .join(" ; ");
-      const interventionText = [workOrder.panne_erreur, periodComments].filter(Boolean).join(" — ");
+      const interventionLabel = workOrder.wo_number
+        ? `${workOrder.panne_erreur} (WO #${workOrder.wo_number})`
+        : workOrder.panne_erreur;
+      const interventionText = [interventionLabel, periodComments].filter(Boolean).join(" — ");
 
       // Autres Work Orders que celui-ci a résolus (relation inverse de
       // resolved_via_wo_id), le cas échéant.
@@ -144,7 +147,8 @@ export default function QcReportModal({ workOrder, centerId, onClose }) {
       a.href = url;
       const [yy, mm, dd] = (workOrder.date_intervention || "").split("-");
       const dateLabel = yy && mm && dd ? `${yy}_${mm}_${dd}` : "date_inconnue";
-      const woLabel = sanitizeFilename(workOrder.wo_number) || "SansNumeroWO";
+      const allWoNumbers = [workOrder.wo_number, ...(resolvedRes.data ?? []).map((w) => w.wo_number)].filter(Boolean);
+      const woLabel = allWoNumbers.length ? allWoNumbers.map(sanitizeFilename).join("-") : "SansNumeroWO";
       a.download = `${dateLabel}_${woLabel}_Rapport_post_intervention.pdf`;
       document.body.appendChild(a);
       a.click();
@@ -203,10 +207,15 @@ export default function QcReportModal({ workOrder, centerId, onClose }) {
         {step === "files" && (
           <>
             <p style={{ fontSize: "0.85rem", marginTop: 0 }}>
-              1. Sélectionnez les PDF de contrôle qualité à joindre après la page de garde (plusieurs fichiers
-              possibles).
+              1. Sélectionnez les documents à joindre après la page de garde : PDF ou images (JPG, PNG),
+              plusieurs fichiers possibles, dans n'importe quel ordre de mélange.
             </p>
-            <input type="file" accept="application/pdf" multiple onChange={handleFilesChosen} />
+            <input
+              type="file"
+              accept="application/pdf,image/jpeg,image/png"
+              multiple
+              onChange={handleFilesChosen}
+            />
             {files.length > 0 && (
               <ul style={{ margin: "10px 0", paddingLeft: 18, fontSize: "0.82rem" }}>
                 {files.map((f, i) => (
@@ -430,9 +439,27 @@ async function buildReport({
   for (const file of files) {
     try {
       const bytes = await file.arrayBuffer();
-      const srcDoc = await PDFDocument.load(bytes);
-      const copiedPages = await doc.copyPages(srcDoc, srcDoc.getPageIndices());
-      copiedPages.forEach((p) => doc.addPage(p));
+      const isJpeg = file.type === "image/jpeg" || file.type === "image/jpg";
+      const isPng = file.type === "image/png";
+      if (isJpeg || isPng) {
+        const img = isJpeg ? await doc.embedJpg(bytes) : await doc.embedPng(bytes);
+        const imgPage = doc.addPage([595.28, 841.89]);
+        const availableW = 495;
+        const availableH = 740;
+        const scale = Math.min(availableW / img.width, availableH / img.height, 1);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        imgPage.drawImage(img, {
+          x: (595.28 - w) / 2,
+          y: (841.89 - h) / 2,
+          width: w,
+          height: h,
+        });
+      } else {
+        const srcDoc = await PDFDocument.load(bytes);
+        const copiedPages = await doc.copyPages(srcDoc, srcDoc.getPageIndices());
+        copiedPages.forEach((p) => doc.addPage(p));
+      }
     } catch (err) {
       console.error(`Impossible de fusionner le fichier ${file.name}:`, err);
     }
