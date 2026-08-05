@@ -45,7 +45,7 @@ const emptyForm = {
 };
 
 export default function RegistreInterventions({ centerId }) {
-  const { readOnly, username } = useAccess();
+  const { role, readOnly, username } = useAccess();
   const [equipments, setEquipments] = useState([]);
   const [systems, setSystems] = useState([]);
   const [activeEquipmentId, setActiveEquipmentId] = useState(null);
@@ -58,6 +58,30 @@ export default function RegistreInterventions({ centerId }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(emptyForm);
   const [reportWorkOrder, setReportWorkOrder] = useState(null);
+  const canValidate = role === "admin" || role === "physicien";
+
+  async function handleValidate(wo) {
+    if (wo.validated) {
+      if (!canValidate) return;
+      if (!window.confirm("Retirer la validation de cette intervention corrective ?")) return;
+      await withRetry(() =>
+        supabase
+          .from("work_orders")
+          .update({ validated: false, validated_by: null, validated_at: null })
+          .eq("id", wo.id)
+      );
+      logActivity(username, `a retiré la validation de l'intervention (${wo.panne_erreur})`);
+    } else {
+      await withRetry(() =>
+        supabase
+          .from("work_orders")
+          .update({ validated: true, validated_by: username, validated_at: new Date().toISOString() })
+          .eq("id", wo.id)
+      );
+      logActivity(username, `a validé l'intervention corrective (${wo.panne_erreur})`);
+    }
+    await loadData(activeEquipmentId);
+  }
 
   useEffect(() => {
     loadEquipments();
@@ -417,6 +441,8 @@ export default function RegistreInterventions({ centerId }) {
                           onDelete={handleDelete}
                           readOnly={readOnly}
                           onOpenReport={() => setReportWorkOrder(row.raw)}
+                          onValidate={() => handleValidate(row.raw)}
+                          canValidate={canValidate}
                         />
                       )}
                     </Fragment>
@@ -439,7 +465,7 @@ export default function RegistreInterventions({ centerId }) {
   );
 }
 
-function EventRow({ row, onEdit, onDelete, readOnly, onOpenReport }) {
+function EventRow({ row, onEdit, onDelete, readOnly, onOpenReport, onValidate, canValidate }) {
   const style = EVENT_STYLES[row.eventType] ?? EVENT_STYLES.corrective;
   return (
     <tr style={{ borderTop: "1px solid var(--border)" }}>
@@ -507,16 +533,23 @@ function EventRow({ row, onEdit, onDelete, readOnly, onOpenReport }) {
           <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
             <button
               onClick={onOpenReport}
-              title="Générer un rapport de contrôles qualité post-intervention"
+              disabled={!row.raw.validated}
+              title={
+                row.raw.validated
+                  ? "Générer un rapport de contrôles qualité post-intervention"
+                  : "L'intervention doit être validée avant de pouvoir générer le rapport CQ"
+              }
               style={{
-                border: "1px solid var(--accent)",
-                background: "var(--accent-soft)",
-                color: "var(--accent-strong)",
+                border: "1px solid " + (row.raw.validated ? "var(--accent)" : "var(--border)"),
+                background: row.raw.validated ? "var(--accent-soft)" : "var(--paper)",
+                color: row.raw.validated ? "var(--accent-strong)" : "var(--ink-soft)",
                 borderRadius: 6,
                 padding: "4px 10px",
                 fontSize: "0.72rem",
                 fontWeight: 600,
                 whiteSpace: "nowrap",
+                cursor: row.raw.validated ? "pointer" : "not-allowed",
+                opacity: row.raw.validated ? 1 : 0.6,
               }}
             >
               📄 Rapport CQ
@@ -524,6 +557,31 @@ function EventRow({ row, onEdit, onDelete, readOnly, onOpenReport }) {
             <span title="Modifiable uniquement dans l'onglet Work Order" style={{ color: "var(--ink-soft)", fontSize: "0.9rem" }}>
               🔒
             </span>
+            <button
+              onClick={onValidate}
+              disabled={!canValidate}
+              title={
+                row.raw.validated
+                  ? `Validé par ${row.raw.validated_by || "?"}${canValidate ? " — cliquer pour retirer la validation" : ""}`
+                  : canValidate
+                  ? "Cliquer pour valider cette intervention corrective"
+                  : "Seuls Admin et Physicien peuvent valider"
+              }
+              style={{
+                border: "none",
+                background: "transparent",
+                fontSize: "1rem",
+                cursor: canValidate ? "pointer" : "default",
+                lineHeight: 1,
+                padding: 0,
+              }}
+            >
+              {row.raw.validated ? (
+                <span style={{ color: "var(--status-ok-ink)" }}>✅</span>
+              ) : (
+                <span style={{ color: "var(--status-bad-ink)" }}>❌</span>
+              )}
+            </button>
           </div>
         ) : null}
       </td>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { supabase, withRetry, authenticateUser, logActivity } from "../lib/supabaseClient";
+import { supabase, withRetry, logActivity } from "../lib/supabaseClient";
+import { useAccess } from "../lib/access";
 
 const NAVY = rgb(39 / 255, 50 / 255, 114 / 255);
 const BLUE = rgb(50 / 255, 93 / 255, 168 / 255);
@@ -13,22 +14,20 @@ function formatDate(iso) {
 }
 
 function sanitizeFilename(s) {
-  return (s || "rapport").replace(/[^a-zA-Z0-9._-]+/g, "_");
+  return (s || "").replace(/[^a-zA-Z0-9._-]+/g, "_");
 }
 
 export default function QcReportModal({ workOrder, centerId, onClose }) {
-  const [step, setStep] = useState("files"); // files -> cq -> signature -> generating
+  const { username } = useAccess();
+  const [step, setStep] = useState("files"); // files -> cq
   const [files, setFiles] = useState([]);
 
   const [qcList, setQcList] = useState([]);
   const [loadingQc, setLoadingQc] = useState(true);
   const [selectedQc, setSelectedQc] = useState(() => new Set());
   const [machineInfo, setMachineInfo] = useState(null);
-
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [signError, setSignError] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState("");
 
   function handleFilesChosen(e) {
     setFiles((prev) => [...prev, ...Array.from(e.target.files || [])]);
@@ -71,34 +70,43 @@ export default function QcReportModal({ workOrder, centerId, onClose }) {
     });
   }
 
-  async function handleSignAndGenerate(e) {
-    e.preventDefault();
-    setSignError("");
-    if (!username.trim() || !password) {
-      setSignError("Identifiant et mot de passe obligatoires pour signer.");
-      return;
-    }
-    const user = await authenticateUser(username, password);
-    if (!user) {
-      setSignError("Identifiant ou mot de passe incorrect.");
-      return;
-    }
+  async function handleGenerate() {
+    setError("");
     setGenerating(true);
     try {
       const centerRes = await withRetry(() => supabase.from("centers").select("name").eq("id", centerId).single());
       const centerName = centerRes.data?.name || "";
 
+      let signataire = workOrder.validated_by || "Non renseigné";
+      if (workOrder.validated_by) {
+        const signerRes = await withRetry(() =>
+          supabase.from("app_users").select("full_name, username").ilike("username", workOrder.validated_by).maybeSingle()
+        );
+        signataire = signerRes.data?.full_name || signerRes.data?.username || workOrder.validated_by;
+      }
+
       const periods = workOrder.downtime_periods || [];
-      const startDates = periods.map((p) => p.date_debut).filter(Boolean).sort();
+      const startKeys = periods
+        .filter((p) => p.date_debut)
+        .map((p) => ({ key: `${p.date_debut} ${p.heure_debut || "00:00"}`, date: p.date_debut, heure: p.heure_debut }))
+        .sort((a, b) => a.key.localeCompare(b.key));
       const finishedPeriods = periods.filter((p) => p.date_fin);
-      const endDates = finishedPeriods.map((p) => p.date_fin).sort();
-      const immobStart = startDates.length ? formatDate(startDates[0]) : null;
+      const endKeys = finishedPeriods
+        .map((p) => ({ key: `${p.date_fin} ${p.heure_fin || "00:00"}`, date: p.date_fin, heure: p.heure_fin }))
+        .sort((a, b) => a.key.localeCompare(b.key));
+
+      const immobStart = startKeys.length
+        ? `${formatDate(startKeys[0].date)}${startKeys[0].heure ? ` ${startKeys[0].heure.slice(0, 5)}` : ""}`
+        : null;
       const immobEnd =
         periods.length > finishedPeriods.length
           ? "en cours"
-          : endDates.length
-          ? formatDate(endDates[endDates.length - 1])
+          : endKeys.length
+          ? `${formatDate(endKeys[endKeys.length - 1].date)}${
+              endKeys[endKeys.length - 1].heure ? ` ${endKeys[endKeys.length - 1].heure.slice(0, 5)}` : ""
+            }`
           : null;
+
       const techniciens = [...new Set(periods.map((p) => p.technicien).filter(Boolean))].join(", ");
       const periodComments = periods
         .map((p) => p.commentaire)
@@ -116,7 +124,7 @@ export default function QcReportModal({ workOrder, centerId, onClose }) {
         technicien: techniciens || "Non renseigné",
         interventionText: interventionText || "—",
         selectedCq: [...selectedQc],
-        signataire: user.full_name || user.username,
+        signataire,
         files,
       });
 
@@ -124,22 +132,20 @@ export default function QcReportModal({ workOrder, centerId, onClose }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `CQ_post_intervention_${sanitizeFilename(machineInfo?.name)}_${sanitizeFilename(
-        workOrder.date_intervention || ""
-      )}.pdf`;
+      const [yy, mm, dd] = (workOrder.date_intervention || "").split("-");
+      const dateLabel = yy && mm && dd ? `${yy}_${mm}_${dd}` : "date_inconnue";
+      const woLabel = sanitizeFilename(workOrder.wo_number) || "SansNumeroWO";
+      a.download = `${dateLabel}_${woLabel}_Rapport_post_intervention.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
 
-      logActivity(
-        user.username,
-        `a généré un rapport de contrôles qualité post-intervention (${machineInfo?.name || ""})`
-      );
+      logActivity(username, `a généré un rapport de contrôles qualité post-intervention (${machineInfo?.name || ""})`);
       onClose();
     } catch (err) {
       console.error("Erreur génération rapport:", err);
-      setSignError("Impossible de générer le rapport. Vérifiez que les fichiers sélectionnés sont bien des PDF valides.");
+      setError("Impossible de générer le rapport. Vérifiez que les fichiers sélectionnés sont bien des PDF valides.");
       setGenerating(false);
     }
   }
@@ -226,9 +232,7 @@ export default function QcReportModal({ workOrder, centerId, onClose }) {
 
         {step === "cq" && (
           <>
-            <p style={{ fontSize: "0.85rem", marginTop: 0 }}>
-              2. Quels contrôles qualité avez-vous réalisés ?
-            </p>
+            <p style={{ fontSize: "0.85rem", marginTop: 0 }}>2. Quels contrôles qualité avez-vous réalisés ?</p>
             {loadingQc ? (
               <p style={{ color: "var(--ink-soft)", fontSize: "0.85rem" }}>Chargement…</p>
             ) : qcList.length === 0 ? (
@@ -246,9 +250,11 @@ export default function QcReportModal({ workOrder, centerId, onClose }) {
                 ))}
               </div>
             )}
+            {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem" }}>{error}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <button
-                onClick={() => setStep("signature")}
+                onClick={handleGenerate}
+                disabled={generating}
                 style={{
                   background: "var(--accent)",
                   color: "#fff",
@@ -259,10 +265,11 @@ export default function QcReportModal({ workOrder, centerId, onClose }) {
                   fontSize: "0.85rem",
                 }}
               >
-                Suivant
+                {generating ? "Génération…" : "Générer le PDF"}
               </button>
               <button
                 onClick={() => setStep("files")}
+                disabled={generating}
                 style={{
                   background: "var(--surface)",
                   border: "1px solid var(--border)",
@@ -275,67 +282,6 @@ export default function QcReportModal({ workOrder, centerId, onClose }) {
               </button>
             </div>
           </>
-        )}
-
-        {step === "signature" && (
-          <form onSubmit={handleSignAndGenerate}>
-            <p style={{ fontSize: "0.85rem", marginTop: 0 }}>
-              3. Signez avec votre compte personnel pour générer le rapport.
-            </p>
-            <label style={{ display: "block", fontSize: "0.78rem", color: "var(--ink-soft)", marginBottom: 4 }}>
-              Identifiant
-            </label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              style={{ width: "100%", marginBottom: 10 }}
-              autoFocus
-            />
-            <label style={{ display: "block", fontSize: "0.78rem", color: "var(--ink-soft)", marginBottom: 4 }}>
-              Mot de passe
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={{ width: "100%", marginBottom: 10 }}
-            />
-            {signError && (
-              <p style={{ color: "var(--status-bad-ink)", fontSize: "0.8rem", margin: "0 0 10px" }}>{signError}</p>
-            )}
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                type="submit"
-                disabled={generating}
-                style={{
-                  background: "var(--accent)",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 6,
-                  padding: "8px 16px",
-                  fontWeight: 600,
-                  fontSize: "0.85rem",
-                }}
-              >
-                {generating ? "Génération…" : "Signer et générer le PDF"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep("cq")}
-                disabled={generating}
-                style={{
-                  background: "var(--surface)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  padding: "8px 16px",
-                  fontSize: "0.85rem",
-                }}
-              >
-                Retour
-              </button>
-            </div>
-          </form>
         )}
       </div>
     </div>
@@ -392,43 +338,39 @@ async function buildReport({
     return lines;
   }
 
-  function drawTitle(text, size, useBold, gapAfter, color = NAVY) {
-    page.drawText(text, { x: marginX, y, size, font: useBold ? bold : font, color });
+  function drawCentered(text, size, useBold, color, gapAfter) {
+    const f = useBold ? bold : font;
+    const w = f.widthOfTextAtSize(text, size);
+    page.drawText(text, { x: marginX + (maxWidth - w) / 2, y, size, font: f, color });
     y -= gapAfter;
   }
 
-  function drawSeparator(gapBefore = 10, gapAfter = 16) {
+  function drawSeparator(gapBefore = 10, gapAfter = 16, color = NAVY) {
     y -= gapBefore;
-    page.drawLine({
-      start: { x: marginX, y },
-      end: { x: marginX + maxWidth, y },
-      thickness: 0.75,
-      color: NAVY,
-    });
+    page.drawLine({ start: { x: marginX, y }, end: { x: marginX + maxWidth, y }, thickness: 0.75, color });
     y -= gapAfter;
   }
 
-  function drawField(label, value, { size = 11, lineHeight = 15, gapAfter = 14, color = BLUE } = {}) {
+  function drawField(label, value, { size = 11, lineHeight = 15, gapAfter = 14, labelColor = BLUE, valueColor = BLUE } = {}) {
     const full = `${label} : ${value}`;
     const lines = wrap(full, size, font);
     lines.forEach((line, i) => {
       if (i === 0) {
-        page.drawText(`${label} : `, { x: marginX, y, size, font: bold, color });
+        page.drawText(`${label} : `, { x: marginX, y, size, font: bold, color: labelColor });
         const labelWidth = bold.widthOfTextAtSize(`${label} : `, size);
         const rest = line.slice(`${label} : `.length);
-        page.drawText(rest, { x: marginX + labelWidth, y, size, font, color });
+        page.drawText(rest, { x: marginX + labelWidth, y, size, font, color: valueColor });
       } else {
-        page.drawText(line, { x: marginX, y, size, font, color });
+        page.drawText(line, { x: marginX, y, size, font, color: valueColor });
       }
       y -= lineHeight;
     });
     y -= gapAfter - lineHeight;
   }
 
-  // --- En-tête : logo à gauche, nom du centre à droite ---
-  const logoSize = 64;
+  const logoSize = 84;
   page.drawImage(logoImage, { x: marginX, y: y - logoSize + 10, width: logoSize, height: logoSize });
-  const centerNameSize = 15;
+  const centerNameSize = 20;
   const centerNameWidth = bold.widthOfTextAtSize(centerName || "", centerNameSize);
   page.drawText(centerName || "", {
     x: marginX + maxWidth - centerNameWidth,
@@ -437,10 +379,9 @@ async function buildReport({
     font: bold,
     color: NAVY,
   });
-  y -= logoSize + 20;
+  y -= logoSize + 24;
 
-  // --- Titre ---
-  drawTitle("Rapport de contrôles de qualité post-intervention", 16, true, 30, NAVY);
+  drawCentered("Rapport de contrôles de qualité post-intervention", 16, true, NAVY, 30);
   drawSeparator();
 
   drawField("Installation", `${machineName}${serialNumber ? ` — n° série ${serialNumber}` : ""}`);
@@ -459,19 +400,12 @@ async function buildReport({
   drawSeparator();
 
   drawField("Contrôles effectués après l'intervention", selectedCq.length ? selectedCq.join(", ") : "Aucun renseigné");
+  drawSeparator();
 
-  y -= 24;
-  page.drawLine({
-    start: { x: marginX, y: y + 10 },
-    end: { x: marginX + maxWidth, y: y + 10 },
-    thickness: 0.5,
-    color: rgb(0.7, 0.7, 0.7),
-  });
-  y -= 10;
-  drawField("Signature", signataire, { gapAfter: 0, color: rgb(0, 0, 0) });
+  drawField("Signature", signataire, { labelColor: NAVY, valueColor: BLUE });
   page.drawText(new Date().toLocaleDateString("fr-FR"), {
     x: marginX,
-    y: y - 4,
+    y,
     size: 10,
     font,
     color: GREY,
