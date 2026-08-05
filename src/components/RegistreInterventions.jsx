@@ -254,6 +254,10 @@ export default function RegistreInterventions({ centerId }) {
           ? `Résolu avec un autre WO : ${wo.resolved_via_wo.immobilisationComment}`
           : "";
       const commentaire = [wo.commentaires, otherWoComment].filter(Boolean).join(" — ");
+      // Le rapport CQ n'est possible que si CE WO est validé, ET si tous les
+      // WO qu'il résout par la même occasion (le cas échéant) le sont aussi.
+      const resolvedByThis = workOrders.filter((w) => w.resolved_via_wo_id === wo.id);
+      const canReport = !!wo.validated && resolvedByThis.every((w) => w.validated);
       return {
         id: `wo-${wo.id}`,
         kind: "wo",
@@ -262,6 +266,8 @@ export default function RegistreInterventions({ centerId }) {
         title: wo.wo_number ? `${wo.panne_erreur} (WO #${wo.wo_number})` : wo.panne_erreur,
         commentaire,
         periods,
+        canReport,
+        resolvedByThisUnvalidated: resolvedByThis.filter((w) => !w.validated),
         raw: wo,
       };
     });
@@ -534,23 +540,25 @@ function EventRow({ row, onEdit, onDelete, readOnly, onOpenReport, onValidate, c
             {!row.raw.resolved_via_other_wo && (
               <button
                 onClick={onOpenReport}
-                disabled={!row.raw.validated}
+                disabled={!row.canReport}
                 title={
-                  row.raw.validated
+                  row.canReport
                     ? "Générer un rapport de contrôles qualité post-intervention"
-                    : "L'intervention doit être validée avant de pouvoir générer le rapport CQ"
+                    : !row.raw.validated
+                    ? "L'intervention doit être validée avant de pouvoir générer le rapport CQ"
+                    : "Un des Work Orders résolus par celui-ci n'est pas encore validé"
                 }
                 style={{
-                  border: "1px solid " + (row.raw.validated ? "var(--accent)" : "var(--border)"),
-                  background: row.raw.validated ? "var(--accent-soft)" : "var(--paper)",
-                  color: row.raw.validated ? "var(--accent-strong)" : "var(--ink-soft)",
+                  border: "1px solid " + (row.canReport ? "var(--accent)" : "var(--border)"),
+                  background: row.canReport ? "var(--accent-soft)" : "var(--paper)",
+                  color: row.canReport ? "var(--accent-strong)" : "var(--ink-soft)",
                   borderRadius: 6,
                   padding: "4px 10px",
                   fontSize: "0.72rem",
                   fontWeight: 600,
                   whiteSpace: "nowrap",
-                  cursor: row.raw.validated ? "pointer" : "not-allowed",
-                  opacity: row.raw.validated ? 1 : 0.6,
+                  cursor: row.canReport ? "pointer" : "not-allowed",
+                  opacity: row.canReport ? 1 : 0.6,
                 }}
               >
                 📄 Rapport CQ

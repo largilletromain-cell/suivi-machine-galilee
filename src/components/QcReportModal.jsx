@@ -120,7 +120,7 @@ export default function QcReportModal({ workOrder, centerId, onClose }) {
         supabase.from("work_orders").select("wo_number, panne_erreur").eq("resolved_via_wo_id", workOrder.id)
       );
       const resolvedOtherWos = (resolvedRes.data ?? [])
-        .map((w) => (w.wo_number ? `#${w.wo_number} — ${w.panne_erreur}` : w.panne_erreur))
+        .map((w) => `WO #${w.wo_number || "non renseigné"} — ${w.panne_erreur}`)
         .join(" ; ");
 
       const bytes = await buildReport({
