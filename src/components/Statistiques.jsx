@@ -33,8 +33,14 @@ const MONTHS_FR = [
 const EVENT_STYLES = {
   corrective: { color: "#e0292a", label: "Maintenance corrective" },
   controle_qualite: { color: "#1565e0", label: "Contrôle de qualité" },
+  cq_mensuel: { color: "#1565e0", label: "Contrôle de qualité Mensuel" },
+  cq_trimestriel: { color: "#1565e0", label: "Contrôle de qualité Trimestriel" },
+  cq_quadrimestriel: { color: "#1565e0", label: "Contrôle de qualité Quadrimestriel" },
+  cq_semestriel: { color: "#1565e0", label: "Contrôle de qualité Semestriel" },
+  cq_annuel: { color: "#1565e0", label: "Contrôle de qualité Annuel" },
   maintenance_preventive: { color: "#1a9c4b", label: "Maintenance préventive" },
   parametrage_machine: { color: "#8b3fd1", label: "Paramétrage machine" },
+  panne_aleatoire: { color: "#c2410c", label: "Panne aléatoire" },
   autre: { color: "#6b7280", label: "Autre" },
 };
 const AVAILABLE_COLOR = "#f0b429";
@@ -112,7 +118,9 @@ export default function Statistiques({ centerId }) {
           ? withRetry(() => supabase.from("interventions").select("*").eq("equipment_id", equipmentId))
           : Promise.resolve({ data: [] }),
         machineId
-          ? withRetry(() => supabase.from("pannes").select("id, date_panne, redemarrage").eq("machine_id", machineId))
+          ? withRetry(() =>
+              supabase.from("pannes").select("id, date_panne, heure_debut, heure_fin, redemarrage").eq("machine_id", machineId)
+            )
           : Promise.resolve({ data: [] }),
       ]);
 
@@ -168,10 +176,11 @@ export default function Statistiques({ centerId }) {
         months: allMonths,
         workOrders,
         interventions,
+        pannes,
         openingStart: openingHours.start,
         openingEnd: openingHours.end,
       }),
-    [allMonths, workOrders, interventions, openingHours]
+    [allMonths, workOrders, interventions, pannes, openingHours]
   );
 
   const selectedStat = useMemo(() => {

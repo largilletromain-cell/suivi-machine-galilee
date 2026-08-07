@@ -148,6 +148,7 @@ const CATEGORY_KEYS = [
   "controle_qualite",
   "maintenance_preventive",
   "parametrage_machine",
+  "panne_aleatoire",
   "autre",
 ];
 
@@ -162,9 +163,35 @@ const CQ_EVENT_TYPES = [
   "cq_annuel",
 ];
 
-export function computeMonthlyStats({ months, workOrders, interventions, openingStart = "08:00", openingEnd = "18:00" }) {
+// Durée d'une panne du Registre Pannes = heure de fin - heure de début
+// (en heures), sans restriction aux jours/heures ouvrés — contrairement aux
+// autres catégories, une panne est un événement ponctuel déjà borné dans le
+// temps par ses propres heures de début/fin.
+function panneDurationHours(p) {
+  if (!p.heure_debut || !p.heure_fin) return 0;
+  const [sh, sm] = p.heure_debut.split(":").map(Number);
+  const [eh, em] = p.heure_fin.split(":").map(Number);
+  const diffMinutes = eh * 60 + em - (sh * 60 + sm);
+  return diffMinutes > 0 ? diffMinutes / 60 : 0;
+}
+
+export function computeMonthlyStats({
+  months,
+  workOrders,
+  interventions,
+  pannes = [],
+  openingStart = "08:00",
+  openingEnd = "18:00",
+}) {
   return months.map(({ year, month }) => {
-    const totals = { corrective: 0, controle_qualite: 0, maintenance_preventive: 0, parametrage_machine: 0, autre: 0 };
+    const totals = {
+      corrective: 0,
+      controle_qualite: 0,
+      maintenance_preventive: 0,
+      parametrage_machine: 0,
+      panne_aleatoire: 0,
+      autre: 0,
+    };
 
     workOrders.forEach((wo) => {
       (wo.downtime_periods || []).forEach((p) => {
@@ -176,6 +203,13 @@ export function computeMonthlyStats({ months, workOrders, interventions, opening
       const key = CQ_EVENT_TYPES.includes(it.event_type) ? "controle_qualite" : it.event_type;
       if (CATEGORY_KEYS.includes(key)) {
         totals[key] += periodBusinessHoursInMonth(it, year, month, openingStart, openingEnd);
+      }
+    });
+
+    const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
+    pannes.forEach((p) => {
+      if (p.date_panne && p.date_panne.startsWith(monthPrefix)) {
+        totals.panne_aleatoire += panneDurationHours(p);
       }
     });
 
