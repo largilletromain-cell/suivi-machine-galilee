@@ -151,6 +151,17 @@ const CATEGORY_KEYS = [
   "autre",
 ];
 
+// Les 5 CQ périodiques (mensuel, trimestriel...) sont sommés ensemble sous la
+// même catégorie statistique "controle_qualite".
+const CQ_EVENT_TYPES = [
+  "controle_qualite",
+  "cq_mensuel",
+  "cq_trimestriel",
+  "cq_quadrimestriel",
+  "cq_semestriel",
+  "cq_annuel",
+];
+
 export function computeMonthlyStats({ months, workOrders, interventions, openingStart = "08:00", openingEnd = "18:00" }) {
   return months.map(({ year, month }) => {
     const totals = { corrective: 0, controle_qualite: 0, maintenance_preventive: 0, parametrage_machine: 0, autre: 0 };
@@ -162,8 +173,9 @@ export function computeMonthlyStats({ months, workOrders, interventions, opening
     });
 
     interventions.forEach((it) => {
-      if (CATEGORY_KEYS.includes(it.event_type)) {
-        totals[it.event_type] += periodBusinessHoursInMonth(it, year, month, openingStart, openingEnd);
+      const key = CQ_EVENT_TYPES.includes(it.event_type) ? "controle_qualite" : it.event_type;
+      if (CATEGORY_KEYS.includes(key)) {
+        totals[key] += periodBusinessHoursInMonth(it, year, month, openingStart, openingEnd);
       }
     });
 
