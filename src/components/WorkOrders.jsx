@@ -46,10 +46,8 @@ function compareRows(a, b, field) {
   }
 }
 
-export default function WorkOrders({ centerId }) {
+export default function WorkOrders({ centerId, selectedSystemId, onSelectSystem }) {
   const { readOnly, username } = useAccess();
-  const [equipments, setEquipments] = useState([]);
-  const [activeEquipmentId, setActiveEquipmentId] = useState(null);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(emptyForm);
@@ -61,8 +59,10 @@ export default function WorkOrders({ centerId }) {
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [sort, setSort] = useState({ field: "date_decouverte", dir: "desc" });
 
+  const currentSystem = systems.find((s) => s.id === selectedSystemId);
+  const activeEquipmentId = currentSystem?.wo_equipment_id || null;
+
   useEffect(() => {
-    loadEquipments();
     loadSystems();
   }, [centerId]);
 
@@ -71,16 +71,13 @@ export default function WorkOrders({ centerId }) {
     loadRows(activeEquipmentId);
   }, [activeEquipmentId]);
 
-  async function loadEquipments() {
-    const res = await withRetry(() =>
-      supabase.from("wo_equipments").select("*").eq("center_id", centerId).order("sort_order")
-    );
-    setEquipments(res.data ?? []);
-  }
-
   async function loadSystems() {
     const res = await withRetry(() =>
-      supabase.from("systems").select("id, name, machine_id, wo_equipment_id, category").eq("center_id", centerId)
+      supabase
+        .from("systems")
+        .select("id, name, machine_id, wo_equipment_id, category, sort_order")
+        .eq("center_id", centerId)
+        .order("sort_order")
     );
     setSystems(res.data ?? []);
   }
@@ -88,18 +85,15 @@ export default function WorkOrders({ centerId }) {
   // Machines toujours le plus à gauche possible (ce sont les plus utilisées),
   // puis les autres catégories groupées à la suite.
   const groupedEquipments = useMemo(() => {
-    const categoryByEquipmentId = Object.fromEntries(
-      systems.filter((s) => s.wo_equipment_id).map((s) => [s.wo_equipment_id, s.category || "machine"])
-    );
     const order = { machine: 0, logiciel: 1, materiel_mesure: 2, fantome: 3, equipement: 4 };
-    return equipments
-      .map((e) => ({ ...e, category: categoryByEquipmentId[e.id] || "machine" }))
+    return systems
+      .slice()
       .sort((a, b) => (order[a.category] ?? 9) - (order[b.category] ?? 9));
-  }, [equipments, systems]);
+  }, [systems]);
 
   useEffect(() => {
-    if (groupedEquipments.length && !activeEquipmentId) {
-      setActiveEquipmentId(groupedEquipments[0].id);
+    if (groupedEquipments.length && !groupedEquipments.some((s) => s.id === selectedSystemId)) {
+      onSelectSystem(groupedEquipments[0].id);
     }
   }, [groupedEquipments]);
 
@@ -172,7 +166,7 @@ export default function WorkOrders({ centerId }) {
           rapport_recu: form.rapport_recu,
         })
       );
-      const equipmentName = equipments.find((e) => e.id === activeEquipmentId)?.label || "";
+      const equipmentName = currentSystem?.name || "";
       logActivity(username, `a ajouté un Work Order (${equipmentName}, ${form.panne_erreur})`);
       setForm(emptyForm);
       await loadRows(activeEquipmentId);
@@ -220,19 +214,18 @@ export default function WorkOrders({ centerId }) {
     return copy;
   }, [rows, sort]);
 
-  const currentSystem = systems.find((s) => s.wo_equipment_id === activeEquipmentId);
   const currentMachineId = currentSystem?.machine_id || null;
   const currentMachineName = currentSystem?.name || "";
 
   return (
     <div>
       <SubTabs
-        items={groupedEquipments.map((e) => ({ key: e.id, label: e.label || e.code, group: e.category }))}
-        activeKey={activeEquipmentId}
-        onChange={setActiveEquipmentId}
+        items={groupedEquipments.map((s) => ({ key: s.id, label: s.name, group: s.category }))}
+        activeKey={selectedSystemId}
+        onChange={onSelectSystem}
       />
 
-      {equipments.length === 0 && (
+      {groupedEquipments.length === 0 && (
         <p style={{ color: "var(--ink-soft)", fontSize: "0.88rem" }}>
           Aucun système enregistré pour l'instant — créez-en un dans l'onglet <strong>Registre du matériel</strong>.
         </p>

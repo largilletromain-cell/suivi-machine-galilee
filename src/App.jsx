@@ -31,6 +31,7 @@ const TABS_BY_ROLE = {
   manipulateur: ["pannes", "types"],
   visualisation: ["pannes", "wo", "interventions", "stats", "types", "parametrage"],
   physicien: ["pannes", "wo", "interventions", "stats", "types", "parametrage"],
+  aide_physicien: ["pannes", "wo", "interventions", "stats", "types", "parametrage"],
   admin: ["pannes", "wo", "interventions", "stats", "types", "parametrage", "utilisateurs", "logs"],
 };
 
@@ -46,6 +47,7 @@ export default function App() {
   const [centersLoaded, setCentersLoaded] = useState(false);
   const [session, setSession] = useState(null); // { role, lockedCenterId, username }
   const [centerId, setCenterId] = useState(null); // centre actuellement affiché
+  const [selectedSystemId, setSelectedSystemId] = useState(null); // machine/équipement sélectionné, partagé entre les onglets
   const [activeTab, setActiveTab] = useState("pannes");
   const [loadError, setLoadError] = useState(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -85,6 +87,12 @@ export default function App() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showUserMenu]);
+
+  // La machine/équipement sélectionné n'a de sens que pour un centre donné :
+  // on la réinitialise dès qu'on change de centre.
+  useEffect(() => {
+    setSelectedSystemId(null);
+  }, [centerId]);
 
   function handleUnlock({ mode, role, centerId: fixedCenterId, username }) {
     let finalRole = role;
@@ -312,10 +320,34 @@ export default function App() {
           )}
           {centerId && (
             <>
-              {activeTab === "pannes" && <RegistrePannes centerId={centerId} />}
-              {activeTab === "wo" && <WorkOrders centerId={centerId} />}
-              {activeTab === "interventions" && <RegistreInterventions centerId={centerId} />}
-              {activeTab === "stats" && <Statistiques centerId={centerId} />}
+              {activeTab === "pannes" && (
+                <RegistrePannes
+                  centerId={centerId}
+                  selectedSystemId={selectedSystemId}
+                  onSelectSystem={setSelectedSystemId}
+                />
+              )}
+              {activeTab === "wo" && (
+                <WorkOrders
+                  centerId={centerId}
+                  selectedSystemId={selectedSystemId}
+                  onSelectSystem={setSelectedSystemId}
+                />
+              )}
+              {activeTab === "interventions" && (
+                <RegistreInterventions
+                  centerId={centerId}
+                  selectedSystemId={selectedSystemId}
+                  onSelectSystem={setSelectedSystemId}
+                />
+              )}
+              {activeTab === "stats" && (
+                <Statistiques
+                  centerId={centerId}
+                  selectedSystemId={selectedSystemId}
+                  onSelectSystem={setSelectedSystemId}
+                />
+              )}
               {activeTab === "types" && <PanneTypesManager />}
               {activeTab === "parametrage" && (
                 <RegistreMateriel centerId={centerId} centers={centers} onCentersChanged={setCenters} />

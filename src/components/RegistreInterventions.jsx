@@ -61,11 +61,9 @@ const emptyForm = {
   commentaire: "",
 };
 
-export default function RegistreInterventions({ centerId }) {
+export default function RegistreInterventions({ centerId, selectedSystemId, onSelectSystem }) {
   const { role, readOnly, username } = useAccess();
-  const [equipments, setEquipments] = useState([]);
   const [systems, setSystems] = useState([]);
-  const [activeEquipmentId, setActiveEquipmentId] = useState(null);
   const [workOrders, setWorkOrders] = useState([]);
   const [interventions, setInterventions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -77,6 +75,9 @@ export default function RegistreInterventions({ centerId }) {
   const [reportWorkOrder, setReportWorkOrder] = useState(null);
   const [reportEvent, setReportEvent] = useState(null);
   const canValidate = role === "admin" || role === "physicien";
+
+  const currentSystem = systems.find((s) => s.id === selectedSystemId);
+  const activeEquipmentId = currentSystem?.wo_equipment_id || null;
 
   async function handleValidate(table, item, label) {
     if (item.validated) {
@@ -99,7 +100,6 @@ export default function RegistreInterventions({ centerId }) {
   }
 
   useEffect(() => {
-    loadEquipments();
     loadSystems();
   }, [centerId]);
 
@@ -108,16 +108,13 @@ export default function RegistreInterventions({ centerId }) {
     loadData(activeEquipmentId);
   }, [activeEquipmentId]);
 
-  async function loadEquipments() {
-    const res = await withRetry(() =>
-      supabase.from("wo_equipments").select("*").eq("center_id", centerId).order("sort_order")
-    );
-    setEquipments(res.data ?? []);
-  }
-
   async function loadSystems() {
     const res = await withRetry(() =>
-      supabase.from("systems").select("wo_equipment_id, category").eq("center_id", centerId)
+      supabase
+        .from("systems")
+        .select("id, name, machine_id, wo_equipment_id, category, sort_order")
+        .eq("center_id", centerId)
+        .order("sort_order")
     );
     setSystems(res.data ?? []);
   }
@@ -125,18 +122,15 @@ export default function RegistreInterventions({ centerId }) {
   // Machines toujours le plus à gauche possible (ce sont les plus utilisées),
   // puis les autres catégories groupées à la suite.
   const groupedEquipments = useMemo(() => {
-    const categoryByEquipmentId = Object.fromEntries(
-      systems.filter((s) => s.wo_equipment_id).map((s) => [s.wo_equipment_id, s.category || "machine"])
-    );
     const order = { machine: 0, logiciel: 1, materiel_mesure: 2, fantome: 3, equipement: 4 };
-    return equipments
-      .map((e) => ({ ...e, category: categoryByEquipmentId[e.id] || "machine" }))
+    return systems
+      .slice()
       .sort((a, b) => (order[a.category] ?? 9) - (order[b.category] ?? 9));
-  }, [equipments, systems]);
+  }, [systems]);
 
   useEffect(() => {
-    if (groupedEquipments.length && !activeEquipmentId) {
-      setActiveEquipmentId(groupedEquipments[0].id);
+    if (groupedEquipments.length && !groupedEquipments.some((s) => s.id === selectedSystemId)) {
+      onSelectSystem(groupedEquipments[0].id);
     }
   }, [groupedEquipments]);
 
@@ -204,7 +198,7 @@ export default function RegistreInterventions({ centerId }) {
           commentaire: form.commentaire || null,
         })
       );
-      const equipmentName = equipments.find((e) => e.id === activeEquipmentId)?.label || "";
+      const equipmentName = currentSystem?.name || "";
       logActivity(username, `a ajouté un événement « ${form.event_type} » (${equipmentName})`);
       setForm(emptyForm);
       await loadData(activeEquipmentId);
@@ -312,12 +306,12 @@ export default function RegistreInterventions({ centerId }) {
   return (
     <div>
       <SubTabs
-        items={groupedEquipments.map((e) => ({ key: e.id, label: e.label || e.code, group: e.category }))}
-        activeKey={activeEquipmentId}
-        onChange={setActiveEquipmentId}
+        items={groupedEquipments.map((s) => ({ key: s.id, label: s.name, group: s.category }))}
+        activeKey={selectedSystemId}
+        onChange={onSelectSystem}
       />
 
-      {equipments.length === 0 && (
+      {groupedEquipments.length === 0 && (
         <p style={{ color: "var(--ink-soft)", fontSize: "0.88rem" }}>
           Aucun système enregistré pour l'instant — créez-en un dans l'onglet <strong>Registre du matériel</strong>.
         </p>

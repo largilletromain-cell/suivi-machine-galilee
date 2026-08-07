@@ -60,9 +60,8 @@ function hexToRgb(hex) {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-export default function Statistiques({ centerId }) {
+export default function Statistiques({ centerId, selectedSystemId, onSelectSystem }) {
   const [machines, setMachines] = useState([]);
-  const [activeMachineId, setActiveMachineId] = useState(null);
   const [openingHours, setOpeningHoursState] = useState({ start: "08:00", end: "18:00" });
   const [workOrders, setWorkOrders] = useState([]);
   const [interventions, setInterventions] = useState([]);
@@ -71,6 +70,7 @@ export default function Statistiques({ centerId }) {
   const [selectedMonthKey, setSelectedMonthKey] = useState(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const reportRef = useRef(null);
+  const activeMachineId = selectedSystemId;
 
   useEffect(() => {
     loadMachines();
@@ -95,8 +95,9 @@ export default function Statistiques({ centerId }) {
     const res = await withRetry(() =>
       supabase.from("systems").select("*").eq("center_id", centerId).not("machine_id", "is", null).order("sort_order")
     );
-    setMachines(res.data ?? []);
-    if (res.data?.length && !activeMachineId) setActiveMachineId(res.data[0].id);
+    const list = res.data ?? [];
+    setMachines(list);
+    if (list.length && !list.some((m) => m.id === selectedSystemId)) onSelectSystem(list[0].id);
   }
 
   async function loadData(systemId) {
@@ -383,9 +384,9 @@ export default function Statistiques({ centerId }) {
     <div>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
         <SubTabs
-          items={machines.map((m) => ({ key: m.id, label: m.name }))}
+          items={machines.map((m) => ({ key: m.id, label: m.name, group: m.category }))}
           activeKey={activeMachineId}
-          onChange={setActiveMachineId}
+          onChange={onSelectSystem}
         />
         {selectedStat && (
           <button

@@ -38,12 +38,11 @@ function defaultForm() {
   };
 }
 
-export default function RegistrePannes({ centerId }) {
+export default function RegistrePannes({ centerId, selectedSystemId, onSelectSystem }) {
   const { readOnly, username } = useAccess();
-  const [machines, setMachines] = useState([]);
-  const [activeMachineId, setActiveMachineId] = useState(null);
+  const [machineSystems, setMachineSystems] = useState([]);
   const [panneTypes, setPanneTypes] = useState([]);
-  const [monthCounts, setMonthCounts] = useState([]); // [{key, count}] tri desc
+  const [monthCounts, setMonthCounts] = useState([]);
   const [rowsByMonth, setRowsByMonth] = useState({});
   const [loadingMonths, setLoadingMonths] = useState(() => new Set());
   const [expandedMonths, setExpandedMonths] = useState(() => new Set([currentMonthKey()]));
@@ -52,24 +51,32 @@ export default function RegistrePannes({ centerId }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const activeSystem = machineSystems.find((s) => s.id === selectedSystemId);
+  const activeMachineId = activeSystem?.machine_id || null;
+
   useEffect(() => {
     loadMachines();
   }, [centerId]);
 
   useEffect(() => {
     if (!activeMachineId) return;
-    const machine = machines.find((m) => m.id === activeMachineId);
-    loadPanneTypes(machine?.machine_type);
+    loadPanneTypes(activeSystem?.system_type);
     initMonths(activeMachineId);
-  }, [activeMachineId, machines]);
+  }, [activeMachineId]);
 
   async function loadMachines() {
     const res = await withRetry(() =>
-      supabase.from("machines").select("*").eq("center_id", centerId).order("sort_order")
+      supabase
+        .from("systems")
+        .select("id, name, machine_id, system_type, category")
+        .eq("center_id", centerId)
+        .not("machine_id", "is", null)
+        .order("sort_order")
     );
-    setMachines(res.data ?? []);
-    if (res.data?.length && !activeMachineId) {
-      setActiveMachineId(res.data[0].id);
+    const list = res.data ?? [];
+    setMachineSystems(list);
+    if (list.length && !list.some((s) => s.id === selectedSystemId)) {
+      onSelectSystem(list[0].id);
     }
   }
 
@@ -80,9 +87,6 @@ export default function RegistrePannes({ centerId }) {
     setPanneTypes(res.data ?? []);
   }
 
-  // Ne récupère qu'une seule colonne (date_panne) pour construire la liste des
-  // mois disponibles, sans charger tout le détail des pannes — c'est ce qui
-  // évite la latence au chargement de la page.
   async function loadMonthCounts(machineId) {
     const res = await withRetry(() =>
       supabase.from("pannes").select("date_panne").eq("machine_id", machineId)
@@ -104,7 +108,7 @@ export default function RegistrePannes({ centerId }) {
     try {
       const start = `${monthKey}-01`;
       const [y, m] = monthKey.split("-").map(Number);
-      const endDate = new Date(y, m, 0).getDate(); // dernier jour du mois
+      const endDate = new Date(y, m, 0).getDate();
       const end = `${monthKey}-${String(endDate).padStart(2, "0")}`;
       const res = await withRetry(() =>
         supabase
@@ -134,7 +138,6 @@ export default function RegistrePannes({ centerId }) {
       const cKey = currentMonthKey();
       setExpandedMonths(new Set([cKey]));
       setRowsByMonth({});
-      // Charge le mois en cours par défaut, qu'il ait déjà des pannes ou non.
       if (list.some((m) => m.key === cKey)) {
         await loadMonthRows(machineId, cKey);
       } else {
@@ -149,7 +152,6 @@ export default function RegistrePannes({ centerId }) {
 
   async function refreshAfterChange(monthKey) {
     const list = await loadMonthCounts(activeMachineId);
-    // recharge tous les mois actuellement dépliés + celui concerné par le changement
     const toReload = new Set(expandedMonths);
     if (monthKey) toReload.add(monthKey);
     for (const key of toReload) {
@@ -197,8 +199,7 @@ export default function RegistrePannes({ centerId }) {
         })
       );
       const monthKey = form.date_panne.slice(0, 7);
-      const machineName = machines.find((m) => m.id === activeMachineId)?.label || "";
-      logActivity(username, `a ajouté une panne (${machineName}, ${form.date_panne})`);
+      logActivity(username, `a ajouté une panne (${activeSystem?.name || ""}, ${form.date_panne})`);
       setForm(defaultForm());
       setExpandedMonths((s) => new Set(s).add(monthKey));
       await refreshAfterChange(monthKey);
@@ -211,36 +212,33 @@ export default function RegistrePannes({ centerId }) {
 
   async function updateField(row, field, value) {
     await withRetry(() => supabase.from("pannes").update({ [field]: value }).eq("id", row.id));
-    const machineName = machines.find((m) => m.id === activeMachineId)?.label || "";
-    logActivity(username, `a modifié une panne (${machineName}, champ « ${field} »)`);
+    logActivity(username, `a modifié une panne (${activeSystem?.name || ""}, champ « ${field} »)`);
     await refreshAfterChange(value && field === "date_panne" ? value.slice(0, 7) : null);
   }
 
   async function handleDelete(id, monthKey) {
     if (!window.confirm("Supprimer cette ligne du registre de pannes ?")) return;
     await withRetry(() => supabase.from("pannes").delete().eq("id", id));
-    const machineName = machines.find((m) => m.id === activeMachineId)?.label || "";
-    logActivity(username, `a supprimé une panne (${machineName})`);
+    logActivity(username, `a supprimé une panne (${activeSystem?.name || ""})`);
     await refreshAfterChange(monthKey);
   }
 
   return (
     <div>
       <SubTabs
-        items={machines.map((m) => ({ key: m.id, label: m.label || m.code }))}
-        activeKey={activeMachineId}
-        onChange={setActiveMachineId}
+        items={machineSystems.map((s) => ({ key: s.id, label: s.name, group: s.category }))}
+        activeKey={selectedSystemId}
+        onChange={onSelectSystem}
       />
 
-      {machines.length === 0 && (
+      {machineSystems.length === 0 && (
         <p style={{ color: "var(--ink-soft)", fontSize: "0.88rem" }}>
           Aucune machine enregistrée pour l'instant — créez-en une dans l'onglet{" "}
-          <strong>Paramétrage</strong>.
+          <strong>Registre du matériel</strong>.
         </p>
       )}
 
       <Panel>
-        {!readOnly && (
         <form
           onSubmit={handleAdd}
           style={{
@@ -337,7 +335,6 @@ export default function RegistrePannes({ centerId }) {
             {saving ? "…" : "Ajouter"}
           </button>
         </form>
-        )}
 
         {error && <p style={{ color: "var(--status-bad-ink)", fontSize: "0.85rem" }}>{error}</p>}
 
@@ -373,7 +370,6 @@ function MonthsList({
   readOnly,
 }) {
   const cKey = currentMonthKey();
-  // Le mois en cours apparaît toujours en premier, même sans pannes.
   const keys = monthCounts.map((m) => m.key);
   const allKeys = keys.includes(cKey) ? keys : [cKey, ...keys];
   const countByKey = Object.fromEntries(monthCounts.map((m) => [m.key, m.count]));
@@ -567,11 +563,9 @@ function PannesTable({ rows, panneTypes, onUpdateField, onDelete, readOnly }) {
                 />
               </td>
               <td style={td}>
-                {!readOnly && (
-                  <IconButton title="Supprimer" danger onClick={() => onDelete(r.id)}>
-                    ✕
-                  </IconButton>
-                )}
+                <IconButton title="Supprimer" danger onClick={() => onDelete(r.id)}>
+                  ✕
+                </IconButton>
               </td>
             </tr>
           );
