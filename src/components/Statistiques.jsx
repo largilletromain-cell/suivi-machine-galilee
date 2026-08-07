@@ -40,7 +40,7 @@ const EVENT_STYLES = {
   cq_annuel: { color: "#1565e0", label: "Contrôle de qualité Annuel" },
   maintenance_preventive: { color: "#1a9c4b", label: "Maintenance préventive" },
   parametrage_machine: { color: "#8b3fd1", label: "Paramétrage machine" },
-  panne_aleatoire: { color: "#c2410c", label: "Panne aléatoire" },
+  panne_aleatoire: { color: "#0d9488", label: "Panne aléatoire" },
   autre: { color: "#6b7280", label: "Autre" },
 };
 const AVAILABLE_COLOR = "#f0b429";
